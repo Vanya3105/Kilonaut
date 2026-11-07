@@ -9,7 +9,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**Fix: workout clock** (branch `fix-workout-clock`, not tested on the phone yet): a workout started while the last one's screen was still up (icon shortcut, switching days, or the last one finished from the notification/watch while the app was in the background) showed the old workout's time. The workout screen is now keyed by the session's start, so each workout gets a fresh one. Also: the "still going" question and "saved" message call a quick workout "Quick workout", like everywhere else.
+**Fix: workout clock** (branch `fix-workout-clock`) is tested on the owner's phone and merged (2026-11-07): a workout started while the last one's screen was still up (icon shortcut, switching days, or the last one finished from the notification/watch while the app was in the background) showed the old workout's time. The workout screen is now keyed by the session's start, so each workout gets a fresh one. Also: the "still going" question and "saved" message call a quick workout "Quick workout", like everywhere else.
 
 **Small extras** (branch `small-extras`) is tested on the owner's phone and merged (2026-11-07). Version is now 3.9.0 (code 39).
 - [x] What's new: a sheet once after an update (not on a fresh install), notes per version in `WhatsNew.notesFor`; never over onboarding or a workout.
