@@ -5,6 +5,8 @@
     <string name="widget_label_weekly">השבוע</string>
     <string name="widget_desc_workout">האימון הבא, או תיעוד סטים בלי לפתוח את האפליקציה</string>
     <string name="widget_desc_recovery">כמה כל קבוצת שרירים מנוחה</string>
+    <string name="widget_label_weight">משקל גוף</string>
+    <string name="widget_desc_weight">המשקל שלכם והמגמה שלו; הקשה לרישום שקילה</string>
     <string name="widget_desc_weekly">אימונים שבוצעו השבוע ומה הבא בתור</string>
 
     <!-- Welcome screen -->

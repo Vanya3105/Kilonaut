@@ -115,6 +115,7 @@ fun sessionValueTitle(type: ExerciseType): String = when (type) {
 const val WIDGET_KIND_WORKOUT = "WORKOUT"
 const val WIDGET_KIND_RECOVERY = "RECOVERY"
 const val WIDGET_KIND_WEEKLY = "WEEKLY"
+const val WIDGET_KIND_WEIGHT = "WEIGHT"
 
 const val WIDGET_STYLE_STANDARD = "STANDARD"
 const val WIDGET_STYLE_TINTED = "TINTED"
@@ -139,6 +140,10 @@ fun widgetOptionLabels(kind: String): List<Pair<String, String>> = when (kind) {
     WIDGET_KIND_RECOVERY -> listOf(
         "sets" to tr("Sets in the last 7 days"),
         "hours" to tr("Time since last trained")
+    )
+    WIDGET_KIND_WEIGHT -> listOf(
+        "trend" to tr("Trend of the last 30 days"),
+        "button" to tr("Log button")
     )
     else -> listOf(
         "volume" to tr("Weekly volume"),

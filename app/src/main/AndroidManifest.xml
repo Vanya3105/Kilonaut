@@ -99,6 +99,19 @@
             android:name=".RestAlarmReceiver"
             android:exported="false" />
 
+        <!-- Widget 4: body weight -->
+        <receiver
+            android:name=".BodyWeightWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_label_weight">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/weight_widget_info" />
+        </receiver>
+
         <!-- Quick Settings tile: start the next workout, or resume the running one. -->
         <service
             android:name=".WorkoutTileService"

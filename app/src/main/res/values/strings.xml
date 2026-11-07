@@ -5,6 +5,8 @@
     <string name="widget_label_weekly">This week</string>
     <string name="widget_desc_workout">Your next workout, or log sets without opening the app</string>
     <string name="widget_desc_recovery">How rested each muscle group is</string>
+    <string name="widget_label_weight">Body weight</string>
+    <string name="widget_desc_weight">Your weight and its trend; tap to log a weigh-in</string>
     <string name="widget_desc_weekly">Workouts done this week and what\'s next</string>
 
     <!-- Welcome screen -->

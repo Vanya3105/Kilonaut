@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget-picker preview: a body-weight trend drifting down, as the widget draws it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="48dp"
+    android:viewportWidth="120"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="@color/preview_accent"
+        android:fillAlpha="0.18"
+        android:pathData="M2,14 L20,12 L38,17 L56,19 L74,24 L92,27 L110,33 L118,34 L118,48 L2,48 Z" />
+    <path
+        android:strokeColor="@color/preview_accent"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2,14 L20,12 L38,17 L56,19 L74,24 L92,27 L110,33 L118,34" />
+</vector>

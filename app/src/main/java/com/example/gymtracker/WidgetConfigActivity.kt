@@ -91,6 +91,7 @@ class WidgetConfigActivity : ComponentActivity() {
 private fun widgetBlurb(kind: String) = when (kind) {
     WIDGET_KIND_RECOVERY -> tr("How rested each muscle is, least rested first.")
     WIDGET_KIND_WEEKLY -> tr("Your week at a glance: workouts done, the days you trained, what's next.")
+    WIDGET_KIND_WEIGHT -> tr("Your weight and its trend. Tap it to log a weigh-in.")
     else -> tr("Your next workout, then the set you're on: tick it off without opening the app.")
 }
 
@@ -112,6 +113,7 @@ private fun WidgetSettingsScreen(appWidgetId: Int, kind: String, onSave: (Widget
     val title = when (kind) {
         WIDGET_KIND_RECOVERY -> tr("Recovery widget")
         WIDGET_KIND_WEEKLY -> tr("Weekly widget")
+        WIDGET_KIND_WEIGHT -> tr("Body weight widget")
         else -> tr("Workout widget")
     }
     val clear = isClear(settings)
@@ -270,6 +272,7 @@ private fun WidgetPreview(kind: String, settings: WidgetSettings, backdrop: Back
     val context = LocalContext.current
     val (wDp, hDp) = when (kind) {
         WIDGET_KIND_WEEKLY -> 170 to 170
+        WIDGET_KIND_WEIGHT -> 300 to 130
         else -> 320 to 150
     }
     // The workout widget takes its colours from the context's mode, as on the home screen.
@@ -298,8 +301,11 @@ private fun WidgetPreview(kind: String, settings: WidgetSettings, backdrop: Back
             )
         } else {
             val bitmap = remember(settings, kind, night) {
-                if (kind == WIDGET_KIND_RECOVERY) MuscleFatigueWidgetProvider.render(modeContext, settings, wDp, hDp, night)
-                else SquarePulseWidgetProvider.render(modeContext, settings, wDp, hDp, night)
+                when (kind) {
+                    WIDGET_KIND_RECOVERY -> MuscleFatigueWidgetProvider.render(modeContext, settings, wDp, hDp, night)
+                    WIDGET_KIND_WEIGHT -> BodyWeightWidgetProvider.render(modeContext, settings, wDp, hDp, night)
+                    else -> SquarePulseWidgetProvider.render(modeContext, settings, wDp, hDp, night)
+                }
             }
             Image(bitmap.asImageBitmap(), contentDescription = tr("Widget preview"), contentScale = ContentScale.Fit, modifier = Modifier.size(wDp.dp, hDp.dp))
         }

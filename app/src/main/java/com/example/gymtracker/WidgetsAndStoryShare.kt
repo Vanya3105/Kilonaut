@@ -178,6 +178,7 @@ fun widgetKindFor(context: Context, appWidgetId: Int): String =
     when (AppWidgetManager.getInstance(context).getAppWidgetInfo(appWidgetId)?.provider?.className) {
         MuscleFatigueWidgetProvider::class.java.name -> WIDGET_KIND_RECOVERY
         SquarePulseWidgetProvider::class.java.name -> WIDGET_KIND_WEEKLY
+        BodyWeightWidgetProvider::class.java.name -> WIDGET_KIND_WEIGHT
         else -> WIDGET_KIND_WORKOUT
     }
 
@@ -717,6 +718,7 @@ private fun pushCanvasWidget(
     widgetId: Int,
     settings: WidgetSettings,
     requestCode: Int,
+    click: PendingIntent = openAppPendingIntent(context, requestCode),
     render: (night: Boolean) -> Bitmap
 ) {
     val (day, night) = widgetPalettes(context, settings)
@@ -730,7 +732,7 @@ private fun pushCanvasWidget(
             setImageViewBitmap(R.id.canvas_widget_image_night, render(true))
         }
     }
-    views.setOnClickPendingIntent(R.id.canvas_widget_root, openAppPendingIntent(context, requestCode))
+    views.setOnClickPendingIntent(R.id.canvas_widget_root, click)
     manager.updateAppWidget(widgetId, views)
 }
 
@@ -1000,6 +1002,147 @@ class SquarePulseWidgetProvider : AppWidgetProvider() {
                 strip(pad, w - pad * 2, h - pad - stripH + 4 * s)
             }
             return bmp
+        }
+    }
+}
+
+/**
+ * Body weight on the home screen: the latest weigh-in large, how it has moved, and the smoothed
+ * trend of the last 30 days. A tap anywhere opens the weigh-in sheet (the ＋ says so).
+ */
+class BodyWeightWidgetProvider : AppWidgetProvider() {
+
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        appWidgetIds.forEach { update(context, appWidgetManager, it) }
+    }
+
+    override fun onAppWidgetOptionsChanged(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
+        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+        update(context, appWidgetManager, appWidgetId)
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) = LocalStorage.deleteWidgetSettings(context, appWidgetIds)
+
+    companion object {
+        private const val TREND_DAYS = 30
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
+
+        fun refreshAll(context: Context) = refreshCanvasWidgets(context, BodyWeightWidgetProvider::class.java, ::update)
+
+        fun update(context: Context, manager: AppWidgetManager, widgetId: Int) {
+            val (wDp, hDp) = widgetSizeDp(manager, widgetId, 250, 110)
+            val settings = LocalStorage.loadWidgetSettings(context, widgetId, WIDGET_KIND_WEIGHT)
+            val log = PendingIntent.getActivity(
+                context, 303,
+                Intent(context, MainActivity::class.java).setAction(AppShortcuts.LOG_WEIGHT)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            pushCanvasWidget(context, manager, widgetId, settings, 303, log) { night -> render(context, settings, wDp, hDp, night) }
+        }
+
+        fun render(context: Context, settings: WidgetSettings, wDp: Int, hDp: Int, night: Boolean = isNightMode(context)): Bitmap {
+            val s = bitmapScale(context, wDp, hDp)
+            val w = wDp * s
+            val h = hDp * s
+            val bmp = Bitmap.createBitmap(w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            val p = drawWidgetCard(canvas, context, settings, w, h, s, night)
+            val sides = Sides(w)
+            val pad = 16 * s
+            val unit = Units.current
+            val showButton = "button" in settings.options
+            val bodyTop = drawWidgetHeader(canvas, context, p, settings, sides, pad, s, tr("Body weight"), null) + 8 * s
+
+            // The ＋ at the header's end: the whole widget logs, this says so.
+            if (showButton) {
+                val r = 12 * s
+                val cx = sides.x(w - pad - r)
+                val cy = pad + 10 * s
+                canvas.drawCircle(cx, cy, r, fillPaint(p.accentPrimary.toArgb()))
+                val arm = 5 * s
+                val plus = strokePaint(p.onAccentPrimary.toArgb(), 2 * s).apply { strokeCap = Paint.Cap.ROUND }
+                canvas.drawLine(cx - arm, cy, cx + arm, cy, plus)
+                canvas.drawLine(cx, cy - arm, cx, cy + arm, plus)
+            }
+
+            val now = System.currentTimeMillis()
+            val days = dailyWeighIns(LocalStorage.loadWeightHistory(context)).sortedBy { it.id }
+            val latest = days.lastOrNull()
+            if (latest == null) {
+                val paint = sides.start(textPaint(p.textSecondary.toArgb(), 13 * s, REGULAR))
+                canvas.drawText(paint.ellipsize(tr("Tap to log your first weigh-in"), w - pad * 2), sides.x(pad), bodyTop + 22 * s, paint)
+                return bmp
+            }
+            val recent = days.filter { it.id >= now - TREND_DAYS * DAY_MS }
+            val first = recent.firstOrNull()?.takeIf { recent.size >= 2 }
+
+            // The number, its unit, and the change since the first weigh-in in the window.
+            val wide = wDp >= hDp * 1.6f
+            val big = sides.start(textPaint(p.textPrimary.toArgb(), (if (wide) 34 else 30) * s, BOLD))
+            val number = formatWeightNumber(latest.weightKg)
+            val numberBase = bodyTop + big.textSize * 0.95f
+            canvas.drawText(number, sides.x(pad), numberBase, big)
+            val unitPaint = sides.start(textPaint(p.textSecondary.toArgb(), 13 * s, MEDIUM))
+            canvas.drawText(unit.label, sides.x(pad + big.measureText(number) + 4 * s), numberBase, unitPaint)
+            val changeText = first?.let {
+                val diff = ((latest.weightKg - it.weightKg) / unit.toKg(1f) * 10).roundToInt() / 10f
+                val since = DateUtils.shortDayOf(it.displayDate, it.id)
+                when {
+                    diff > 0f -> "+${formatKgClean(diff)} ${unit.label} " + tr("since {0}", since)
+                    diff < 0f -> "−${formatKgClean(-diff)} ${unit.label} " + tr("since {0}", since)
+                    else -> tr("No change {0}", tr("since {0}", since))
+                }
+            } ?: DateUtils.shortDayOf(latest.displayDate, latest.id)
+            val changePaint = sides.start(textPaint(p.textSecondary.toArgb(), 11.5f * s, REGULAR))
+            val textW = if (wide) w * 0.42f else w - pad * 2
+            canvas.drawText(changePaint.ellipsize(changeText, textW), sides.x(pad), numberBase + 17 * s, changePaint)
+
+            // The trend: beside the number when wide, under it otherwise, if there's room.
+            if ("trend" in settings.options && recent.size >= 2) {
+                val trend = weightTrend(recent).map { unit.fromKg(it) }
+                val box = if (wide) RectF(w * 0.5f, bodyTop + 4 * s, w - pad, h - pad)
+                else RectF(pad, numberBase + 28 * s, w - pad, h - pad)
+                if (box.height() >= 18 * s) drawTrend(canvas, box, recent.map { it.id }, trend, p, s, sides.rtl)
+            }
+            return bmp
+        }
+
+        private fun drawTrend(canvas: Canvas, box: RectF, times: List<Long>, values: List<Float>, p: GymPalette, s: Float, rtl: Boolean) {
+            val lo = values.min()
+            val hi = values.max()
+            // A flat stretch shouldn't fill the box edge to edge: at least half a unit of scale.
+            val range = maxOf(hi - lo, 0.5f)
+            val mid = (hi + lo) / 2
+            val t0 = times.first()
+            val span = maxOf(times.last() - t0, 1L).toFloat()
+            fun x(i: Int): Float {
+                val f = (times[i] - t0) / span
+                return if (rtl) box.right - f * box.width() else box.left + f * box.width()
+            }
+            fun y(v: Float) = box.centerY() - (v - mid) / range * (box.height() - 6 * s)
+            val line = android.graphics.Path().apply {
+                moveTo(x(0), y(values[0]))
+                for (i in 1 until values.size) lineTo(x(i), y(values[i]))
+            }
+            val fill = android.graphics.Path(line).apply {
+                lineTo(x(values.lastIndex), box.bottom)
+                lineTo(x(0), box.bottom)
+                close()
+            }
+            val accent = p.accentPrimary.toArgb()
+            canvas.drawPath(fill, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = android.graphics.LinearGradient(
+                    0f, box.top, 0f, box.bottom,
+                    android.graphics.Color.argb(70, android.graphics.Color.red(accent), android.graphics.Color.green(accent), android.graphics.Color.blue(accent)),
+                    android.graphics.Color.argb(0, android.graphics.Color.red(accent), android.graphics.Color.green(accent), android.graphics.Color.blue(accent)),
+                    android.graphics.Shader.TileMode.CLAMP
+                )
+            })
+            canvas.drawPath(line, strokePaint(accent, 2.5f * s).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND })
+            val end = android.graphics.PointF(x(values.lastIndex), y(values.last()))
+            canvas.drawCircle(end.x, end.y, 4.5f * s, fillPaint(p.bgCard.toArgb()))
+            canvas.drawCircle(end.x, end.y, 3f * s, fillPaint(accent))
         }
     }
 }

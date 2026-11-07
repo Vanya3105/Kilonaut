@@ -208,6 +208,7 @@ object LocalStorage {
         GymWidgetProvider.refreshAllWidgets(appCtx)
         MuscleFatigueWidgetProvider.refreshAll(appCtx)
         SquarePulseWidgetProvider.refreshAll(appCtx)
+        BodyWeightWidgetProvider.refreshAll(appCtx)
         LockScreenWorkoutController.sync(appCtx)
         WatchSync.publish(appCtx)
     }
