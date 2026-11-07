@@ -951,7 +951,7 @@ private fun ExerciseCard(
                     )
                     // The name opens the exercise's page: say so without a separate button.
                     if (!collapsed) Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = P.textTertiary, modifier = Modifier.size(20.dp))
-                    AnimatedVisibility(allDone, enter = scaleIn(spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow)) + fadeIn(), exit = scaleOut() + fadeOut()) {
+                    AnimatedVisibility(allDone, enter = scaleIn(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium), initialScale = 0.6f) + fadeIn(), exit = scaleOut() + fadeOut()) {
                         Box(Modifier.padding(start = 6.dp).size(18.dp).clip(CircleShape).background(P.successSurface), contentAlignment = Alignment.Center) {
                             Icon(Icons.Rounded.Check, tr("All sets done"), tint = P.successText, modifier = Modifier.size(12.dp))
                         }
@@ -1389,8 +1389,9 @@ private fun CheckButton(done: Boolean, onClick: () -> Unit) {
     var previous by remember { mutableStateOf(done) }
     LaunchedEffect(done) {
         if (done && !previous) {
-            pop.animateTo(1.18f, spring(stiffness = Spring.StiffnessHigh))
-            pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium))
+            // A small, firm press: it lands rather than wobbles.
+            pop.animateTo(1.08f, spring(stiffness = Spring.StiffnessHigh))
+            pop.animateTo(1f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium))
         }
         previous = done
     }
@@ -1559,7 +1560,7 @@ private fun FinishSheet(
                     Text(
                         when {
                             isEditing -> tr("Save changes")
-                            celebrate -> if (stats.prCount == 1) tr("New best!") else tr("{0} new bests!", stats.prCount)
+                            celebrate -> if (stats.prCount == 1) tr("New personal best") else tr("{0} new personal bests", stats.prCount)
                             else -> tr("Nice work")
                         },
                         style = AppType.display,
@@ -1676,7 +1677,6 @@ private fun FinishSheet(
                 icon = Icons.Rounded.IosShare
             )
         }
-        if (celebrate) ConfettiBurst(Modifier.matchParentSize())
         }
     }
 }
@@ -1688,7 +1688,7 @@ private fun FinishBadge(trophy: Boolean) {
     val pop = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         delay(120)
-        pop.animateTo(1f, spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessMediumLow))
+        pop.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow))
     }
     Box(
         Modifier

@@ -53,7 +53,7 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
     val badge = remember { Animatable(0f) }
     val content = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        launch { badge.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow)) }
+        launch { badge.animateTo(1f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessLow)) }
         delay(180)
         haptics.confirm()
         content.animateTo(1f, tween(420))
@@ -92,9 +92,9 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
             ) {
                 Text(
                     when {
-                        bests.size > 1 -> tr("{0} new bests!", bests.size)
-                        bests.size == 1 -> tr("New best!")
-                        else -> tr("Workout done!")
+                        bests.size > 1 -> tr("{0} new personal bests", bests.size)
+                        bests.size == 1 -> tr("New personal best")
+                        else -> tr("Workout complete")
                     },
                     style = AppType.display,
                     color = P.textPrimary,
@@ -157,9 +157,13 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
                 Spacer(Modifier.height(24.dp))
             }
         }
-        ConfettiBurst(Modifier.fillMaxSize(), pieces = if (bests.isNotEmpty()) 150 else 110, cannons = true)
+        // Confetti is for milestones only: after every workout it made the app feel like a game.
+        if (isMilestone(data.workoutNumber)) ConfettiBurst(Modifier.fillMaxSize(), pieces = 90, cannons = true)
     }
 }
+
+/** The 1st, 10th, 25th, 50th and 100th workout, then every 100th. */
+internal fun isMilestone(workoutNumber: Int) = workoutNumber in setOf(1, 10, 25, 50) || (workoutNumber > 0 && workoutNumber % 100 == 0)
 
 private fun ordinal(n: Int): String {
     if (hebrewOn()) return "$n"

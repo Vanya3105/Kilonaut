@@ -9,6 +9,12 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Professional pass** (branch `pro-pass`, not tested on the phone yet), after the owner worried the app feels childish:
+- [x] Motion settles instead of wobbling: no spring below 0.75 damping (tab icons, set tick pop 1.18 → 1.08, badges, picker check, nav pill, press feedback, consistency calendar).
+- [x] Confetti only for milestones (`isMilestone`: 1st, 10th, 25th, 50th, 100th workout, then every 100th), none in the workout's finish sheet. No exclamation marks: "Workout complete", "New personal best".
+- [x] One selection style (inverted, like the chips; reminder days were orange); one orange button per screen (Health Connect's Connect is secondary).
+- [x] Shorter helper text on Profile; no vibration for moving around (tabs, opening pages), only for decisions.
+
 **Swap + Short on time** (branch `swap-and-time`) is tested on the owner's phone and merged (2026-11-07):
 - [x] Machine taken? (exercise ⋮, before any of its sets is done): three alternatives for the same muscle, same movement first (`movementOf`), fitting the equipment, ones done before first, preferably other equipment; each shows the set it would start at. Keeps the set count; "Keep it in <day>" replaces it in the day (position and target kept, `LocalStorage.replaceInSplitTemplate`); Undo.
 - [x] Short on time? (Today's Up next): "~N min" estimate (sets, rests, changeovers: `estimateSeconds`), pick 20–75 min, see what's cut (warm-ups, then isolation/later sets to 2, main lifts to 2, then whole exercises from the end, isolation first: `trimToMinutes`), start the shorter version.

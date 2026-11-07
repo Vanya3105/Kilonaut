@@ -39,7 +39,7 @@ internal const val CONSISTENCY_WEEKS = 18
 
 /** How many columns a day takes to land once the sweep reaches it. */
 private const val SWEEP_TAIL = 4f
-private val OvershootEase = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
+private val SettleEase = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
 internal fun computeConsistency(history: List<CompletedWorkout>, nowMillis: Long = System.currentTimeMillis(), weeks: Int = CONSISTENCY_WEEKS): Consistency {
     fun dayStart(millis: Long) = Calendar.getInstance().apply {
@@ -165,8 +165,8 @@ private fun TrainingCalendar(days: List<List<Int>>, reveal: () -> Float) {
                 if (count > 0) {
                     val t = ((sweep - col) / SWEEP_TAIL).coerceIn(0f, 1f)
                     if (t > 0f) {
-                        // A little overshoot as each day lands.
-                        val grow = cell * (0.4f + 0.6f * OvershootEase.transform(t))
+                        // Each day grows in and settles.
+                        val grow = cell * (0.4f + 0.6f * SettleEase.transform(t))
                         val inset = (cell - grow) / 2
                         drawRoundRect(
                             P.accentPrimary.copy(alpha = (if (count == 1) 0.75f else 1f) * t),

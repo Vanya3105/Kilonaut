@@ -170,7 +170,7 @@ private class PressScaleNode(
                     else -> return@collect
                 }
                 val target = if (held.isEmpty()) 1f else pressedScale
-                launch { scale.animateTo(target, spring(dampingRatio = 0.55f, stiffness = 700f)) }
+                launch { scale.animateTo(target, spring(dampingRatio = 0.8f, stiffness = 700f)) }
             }
         }
     }

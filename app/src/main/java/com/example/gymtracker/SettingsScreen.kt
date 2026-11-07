@@ -272,7 +272,7 @@ fun SettingsScreen(
                 ToggleRow(tr("Keep screen on"), tr("While a workout is open"), settings.keepScreenAwake) {
                     onUpdateSettings(settings.copy(keepScreenAwake = it))
                 }
-                ToggleRow(tr("Vibration"), tr("Light feedback when you tap"), settings.hapticsEnabled) {
+                ToggleRow(tr("Vibration"), null, settings.hapticsEnabled) {
                     onUpdateSettings(settings.copy(hapticsEnabled = it))
                 }
                 if (!notificationsOn) {
@@ -300,7 +300,7 @@ fun SettingsScreen(
                     otherAppLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
                 }
                 Text(
-                    tr("Workouts from their export file are added to your history. A copy of your data is kept first."),
+                    tr("Added to your history. A copy of your data is kept first."),
                     style = AppType.caption,
                     color = P.textTertiary
                 )
@@ -309,7 +309,7 @@ fun SettingsScreen(
                     csvLauncher.launch("kilonaut-workouts-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(Date())}.csv")
                 }
                 Text(
-                    tr("Every set as a spreadsheet row, in the layout Strong uses, so other apps can read it."),
+                    tr("One row per set, in Strong's layout, so other apps can read it."),
                     style = AppType.caption,
                     color = P.textTertiary
                 )
@@ -344,7 +344,7 @@ fun SettingsScreen(
                     Icon(Icons.Rounded.Widgets, null, tint = P.textSecondary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        tr("Widgets: add them from your home screen. Long-press a widget and choose its settings to change the theme, transparency and what it shows."),
+                        tr("Add widgets from your home screen. Long-press one to change how it looks."),
                         style = AppType.caption,
                         color = P.textSecondary
                     )
@@ -358,7 +358,7 @@ fun SettingsScreen(
             SettingsGroup(tr("Advanced")) {
                 ToggleRow(
                     title = tr("Smooth scrolling"),
-                    subtitle = tr("Uses your screen's highest refresh rate (120 Hz). Turn off to save battery."),
+                    subtitle = tr("120 Hz. Off saves battery."),
                     checked = settings.targetFps >= 120,
                     onCheckedChange = { onUpdateSettings(settings.copy(targetFps = if (it) 120 else 60)) }
                 )
@@ -366,7 +366,7 @@ fun SettingsScreen(
                     var crashReports by remember { mutableStateOf(CrashReports.isOn(context)) }
                     ToggleRow(
                         title = tr("Send crash reports"),
-                        subtitle = tr("If the app crashes, what went wrong and the phone model go to the developer, so it can be fixed. Never your workouts."),
+                        subtitle = tr("What went wrong and the phone model, never your workouts."),
                         checked = crashReports,
                         onCheckedChange = { crashReports = it; CrashReports.set(context, it) }
                     )
@@ -475,7 +475,8 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
                     weekdayLetters().forEachIndexed { i, letter ->
                         val day = i + 1 // Calendar.SUNDAY == 1
                         val picked = day in settings.reminderDays
-                        val bg by animateColorAsState(if (picked) P.accentPrimary else P.bgControl, label = "reminder_day")
+                        // Inverted like every other choice in the app; orange is for actions.
+                        val bg by animateColorAsState(if (picked) P.textPrimary else P.bgControl, label = "reminder_day")
                         Box(
                             Modifier
                                 .size(38.dp)
@@ -488,13 +489,13 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
                                 .semantics { this.selected = picked },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(letter, style = AppType.label, color = if (picked) P.onAccentPrimary else P.textSecondary)
+                            Text(letter, style = AppType.label, color = if (picked) P.bgPrimary else P.textSecondary)
                         }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 TimeRow(time) { picking = ReminderKind.WORKOUT }
-                Text(tr("Not on days you've already trained, or while a workout is going."), style = AppType.caption, color = P.textTertiary)
+                Text(tr("Skipped on days you've trained."), style = AppType.caption, color = P.textTertiary)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -511,7 +512,7 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
         AnimatedVisibility(settings.weighReminderOn, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             Column {
                 TimeRow(weighTime) { picking = ReminderKind.WEIGH_IN }
-                Text(tr("Not once you've weighed in that day."), style = AppType.caption, color = P.textTertiary)
+                Text(tr("Skipped once you've weighed in."), style = AppType.caption, color = P.textTertiary)
             }
         }
     }
@@ -622,7 +623,7 @@ private fun HealthConnectGroup(onImported: () -> Unit) {
                     color = P.textSecondary
                 )
                 Spacer(Modifier.height(12.dp))
-                PrimaryButton(tr("Connect"), { askPermissions.launch(HealthSync.PERMISSIONS) }, Modifier.fillMaxWidth())
+                SecondaryButton(tr("Connect"), { askPermissions.launch(HealthSync.PERMISSIONS) }, Modifier.fillMaxWidth())
                 LinkRow(Icons.AutoMirrored.Rounded.OpenInNew, tr("Open Health Connect")) { open(HealthSync.manageIntent(context)) }
             } else {
                 SharedRow(tr("Workouts you finish"), HealthSync.WRITE_WORKOUTS in granted)

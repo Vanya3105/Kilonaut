@@ -540,7 +540,6 @@ fun GymTrackerApp(
     }
 
     fun openPastWorkout(workout: CompletedWorkout) {
-        haptics.tick()
         currentExercises = workout.exercises
         editingPastWorkout = workout
     }
@@ -655,7 +654,7 @@ fun GymTrackerApp(
                         },
                         onDeleteWeight = { id -> deleteWeighIn(id) },
                         logWeightRequest = logWeightRequest,
-                        onOpenExercise = { haptics.tick(); openExercise = it },
+                        onOpenExercise = { openExercise = it },
                         onMergeExercises = { from, into -> mergeExercises(from, into) }
                     )
                     AppTab.PROFILE -> SettingsScreen(
@@ -678,9 +677,9 @@ fun GymTrackerApp(
                             // The workout on screen is the one from before the restore: take the backup's, or none.
                             reloadFromDisk.value()
                         },
-                        onEditProgram = { haptics.tick(); editingProgramId = it },
-                        onBuildSplit = { haptics.tick(); buildingSplit = it },
-                        onEditTraining = { haptics.tick(); onboardingStart = 1; showOnboarding = true }
+                        onEditProgram = { editingProgramId = it },
+                        onBuildSplit = { buildingSplit = it },
+                        onEditTraining = { onboardingStart = 1; showOnboarding = true }
                     )
                 }
             }
@@ -693,17 +692,12 @@ fun GymTrackerApp(
                 ResumeWorkoutBar(
                     splitTitle = activeSplit?.title.orEmpty(),
                     exercises = currentExercises,
-                    onResume = {
-                        haptics.tick()
-                        workoutExpanded = true
-                    }
+                    onResume = { workoutExpanded = true }
                 )
             }
 
-            BottomNavBar(selected = selectedTab, onSelect = {
-                if (it != selectedTab) haptics.tick()
-                selectedTab = it
-            })
+            // No buzz for moving around: vibration is kept for decisions (a set, a save, a delete).
+            BottomNavBar(selected = selectedTab, onSelect = { selectedTab = it })
         }
         // The tabs draw edge to edge; this keeps scrolled content from running under the clock.
         StatusBarScrim()
@@ -959,7 +953,7 @@ fun GymTrackerApp(
                         }
                         showOnboarding = false; onboardingStart = 0
                     },
-                    onBuildSplit = { haptics.tick(); buildingSplit = it },
+                    onBuildSplit = { buildingSplit = it },
                     startStep = onboardingStart,
                     onSaveProfile = { newProfile ->
                         val weightChanged = newProfile.currentWeightKg != userProfile.currentWeightKg
@@ -1300,7 +1294,7 @@ private fun BottomNavBar(selected: AppTab, onSelect: (AppTab) -> Unit) {
             val pillWidth = 64.dp
             val pillX by animateDpAsState(
                 tabWidth * selected.ordinal + (tabWidth - pillWidth) / 2,
-                spring(dampingRatio = 0.68f, stiffness = Spring.StiffnessMediumLow),
+                spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium),
                 label = "nav_pill_x"
             )
             Box(
@@ -1319,8 +1313,8 @@ private fun BottomNavBar(selected: AppTab, onSelect: (AppTab) -> Unit) {
                     val bounce = remember { Animatable(1f) }
                     LaunchedEffect(isSelected) {
                         if (isSelected) {
-                            bounce.snapTo(0.82f)
-                            bounce.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium))
+                            bounce.snapTo(0.9f)
+                            bounce.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium))
                         }
                     }
                     Column(

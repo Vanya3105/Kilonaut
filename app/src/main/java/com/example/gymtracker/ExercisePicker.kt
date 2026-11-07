@@ -321,7 +321,7 @@ private fun PickerRow(
             }
             AnimatedContent(
                 targetState = added,
-                transitionSpec = { scaleIn(spring(dampingRatio = 0.5f)).togetherWith(scaleOut()) },
+                transitionSpec = { scaleIn(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium), initialScale = 0.6f).togetherWith(scaleOut()) },
                 label = "picker_check"
             ) { isAdded ->
                 // A 44dp target around the 30dp circle, so the + is easy to hit apart from the row.
