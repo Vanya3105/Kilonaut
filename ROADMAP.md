@@ -9,7 +9,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**Weight widget + Do it again** (branch `weight-widget`, not tested on the phone yet):
+**Weight widget + Do it again** (branch `weight-widget`) is tested on the owner's phone and merged (2026-11-07):
 - [x] Body-weight widget (4th widget, `BodyWeightWidgetProvider`): latest weigh-in, change since the first in 30 days, the smoothed 30-day trend; a tap opens the weigh-in sheet. Same colours/see-through/settings as the others; `WeightWidgetTest` draws it to app/build/screenshots.
 - [x] History → a workout's ⋮ → Do it again: its exercises in order, as many work sets as it had, today's suggested numbers, under its own name; through the "still going" question when a workout runs.
 
