@@ -6,6 +6,8 @@ import android.Manifest
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.TimePicker
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import java.util.Calendar
 import android.content.ActivityNotFoundException
@@ -436,14 +438,22 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
     val P = LocalPalette.current
     val context = LocalContext.current
     val on = settings.reminderDays.isNotEmpty()
-    var picking by remember { mutableStateOf(false) }
+    // Which time is being picked: the workout reminder's or the weigh-in's.
+    var picking by remember { mutableStateOf<ReminderKind?>(null) }
     val is24 = android.text.format.DateFormat.is24HourFormat(context)
-    val time = remember(settings.reminderMinutes, is24) {
-        val cal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, settings.reminderMinutes / 60); set(Calendar.MINUTE, settings.reminderMinutes % 60) }
-        java.text.SimpleDateFormat(if (is24) "HH:mm" else "h:mm a", java.util.Locale.getDefault()).format(cal.time)
+    fun clock(minutes: Int): String {
+        val cal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, minutes / 60); set(Calendar.MINUTE, minutes % 60) }
+        return java.text.SimpleDateFormat(if (is24) "HH:mm" else "h:mm a", java.util.Locale.getDefault()).format(cal.time)
     }
+    val time = clock(settings.reminderMinutes)
+    val weighTime = clock(settings.weighReminderMinutes)
     // Reminders are notifications: on Android 13+ they need the permission, asked when turned on.
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    fun askIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
     SettingsGroup(tr("Reminders")) {
         ToggleRow(
             tr("Workout reminders"),
@@ -451,9 +461,7 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
             on
         ) { turnOn ->
             onUpdateSettings(settings.copy(reminderDays = if (turnOn) defaultReminderDays(perWeek) else emptySet()))
-            if (turnOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if (turnOn) askIfNeeded()
         }
         AnimatedVisibility(on, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             Column {
@@ -480,28 +488,80 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).pressable(pressedScale = 0.99f) { picking = true }.padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(tr("Time"), style = AppType.body, color = P.textPrimary, modifier = Modifier.weight(1f))
-                    Text(time, style = AppType.label, color = P.textPrimary, modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(P.bgControl).padding(horizontal = 14.dp, vertical = 8.dp))
-                }
+                TimeRow(time) { picking = ReminderKind.WORKOUT }
                 Text(tr("Not on days you've already trained, or while a workout is going."), style = AppType.caption, color = P.textTertiary)
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(P.borderSubtle))
+        Spacer(Modifier.height(8.dp))
+        ToggleRow(
+            tr("Morning weigh-in"),
+            if (settings.weighReminderOn) tr("Every day at {0}", weighTime) else tr("A reminder to weigh yourself each morning"),
+            settings.weighReminderOn
+        ) { turnOn ->
+            onUpdateSettings(settings.copy(weighReminderOn = turnOn))
+            if (turnOn) askIfNeeded()
+        }
+        AnimatedVisibility(settings.weighReminderOn, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Column {
+                TimeRow(weighTime) { picking = ReminderKind.WEIGH_IN }
+                Text(tr("Not once you've weighed in that day."), style = AppType.caption, color = P.textTertiary)
+            }
+        }
     }
-    if (picking) {
-        val state = rememberTimePickerState(settings.reminderMinutes / 60, settings.reminderMinutes % 60, is24)
+    picking?.let { kind ->
+        val minutes = if (kind == ReminderKind.WORKOUT) settings.reminderMinutes else settings.weighReminderMinutes
+        val state = rememberTimePickerState(minutes / 60, minutes % 60, is24)
         AlertDialog(
-            onDismissRequest = { picking = false },
+            onDismissRequest = { picking = null },
             containerColor = P.bgElevated,
             confirmButton = {
-                TextButton({ picking = false; onUpdateSettings(settings.copy(reminderMinutes = state.hour * 60 + state.minute)) }) { Text(tr("Done"), color = P.accentPrimary) }
+                TextButton({
+                    picking = null
+                    val picked = state.hour * 60 + state.minute
+                    onUpdateSettings(if (kind == ReminderKind.WORKOUT) settings.copy(reminderMinutes = picked) else settings.copy(weighReminderMinutes = picked))
+                }) { Text(tr("Done"), color = P.accentPrimary) }
             },
-            dismissButton = { TextButton({ picking = false }) { Text(tr("Cancel"), color = P.textSecondary) } },
-            text = { TimePicker(state) }
+            dismissButton = { TextButton({ picking = null }) { Text(tr("Cancel"), color = P.textSecondary) } },
+            // The app's orange and greys, not Material's default purple and pink.
+            text = {
+                TimePicker(
+                    state,
+                    colors = TimePickerDefaults.colors(
+                        clockDialColor = P.bgControl,
+                        clockDialSelectedContentColor = P.onAccentPrimary,
+                        clockDialUnselectedContentColor = P.textPrimary,
+                        selectorColor = P.accentPrimary,
+                        containerColor = P.bgElevated,
+                        periodSelectorBorderColor = P.borderStrong,
+                        periodSelectorSelectedContainerColor = P.accentSoft,
+                        periodSelectorUnselectedContainerColor = Color.Transparent,
+                        periodSelectorSelectedContentColor = P.accentPrimary,
+                        periodSelectorUnselectedContentColor = P.textSecondary,
+                        timeSelectorSelectedContainerColor = P.accentSoft,
+                        timeSelectorUnselectedContainerColor = P.bgControl,
+                        timeSelectorSelectedContentColor = P.accentPrimary,
+                        timeSelectorUnselectedContentColor = P.textPrimary
+                    )
+                )
+            }
         )
+    }
+}
+
+private enum class ReminderKind { WORKOUT, WEIGH_IN }
+
+/** "Time" with the chosen time in a pill; tap to change it. */
+@Composable
+private fun TimeRow(time: String, onClick: () -> Unit) {
+    val P = LocalPalette.current
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(12.dp)).pressable(pressedScale = 0.99f, onClick = onClick).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(tr("Time"), style = AppType.body, color = P.textPrimary, modifier = Modifier.weight(1f))
+        Text(time, style = AppType.label, color = P.textPrimary, modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(P.bgControl).padding(horizontal = 14.dp, vertical = 8.dp))
     }
 }
 

@@ -47,7 +47,10 @@ data class AppSettings(
     /** Workout reminder days (Calendar.SUNDAY…); none = reminders off. */
     val reminderDays: Set<Int> = emptySet(),
     /** Reminder time, minutes after midnight. */
-    val reminderMinutes: Int = 18 * 60
+    val reminderMinutes: Int = 18 * 60,
+    /** A reminder every morning to weigh in. */
+    val weighReminderOn: Boolean = false,
+    val weighReminderMinutes: Int = 7 * 60 + 30
 )
 
 /**

@@ -172,7 +172,9 @@ fun GymTrackerRoot(activity: Activity) {
                     val old = settings
                     settings = newSettings
                     LocalStorage.saveSettings(context, newSettings)
-                    if (newSettings.reminderDays != old.reminderDays || newSettings.reminderMinutes != old.reminderMinutes) {
+                    if (newSettings.reminderDays != old.reminderDays || newSettings.reminderMinutes != old.reminderMinutes ||
+                        newSettings.weighReminderOn != old.weighReminderOn || newSettings.weighReminderMinutes != old.weighReminderMinutes
+                    ) {
                         WorkoutReminders.schedule(context)
                     }
                     haptics.tick()
@@ -596,6 +598,7 @@ fun GymTrackerApp(
                         haptics = haptics,
                         onLogWeight = { kg ->
                             weightHistory = LocalStorage.addWeightLog(context, kg)
+                            WorkoutReminders.dismissWeighIn(context)
                             userProfile = LocalStorage.loadUserProfile(context)
                         },
                         onDeleteWeight = { id -> deleteWeighIn(id) },

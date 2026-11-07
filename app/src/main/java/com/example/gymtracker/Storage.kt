@@ -420,7 +420,9 @@ object LocalStorage {
             keepScreenAwake = obj.optBoolean("keepScreenAwake", true),
             restSoundEnabled = obj.optBoolean("restSoundEnabled", true),
             reminderDays = obj.optJSONArray("reminderDays")?.let { a -> (0 until a.length()).map { a.optInt(it) }.filter { it in 1..7 }.toSet() }.orEmpty(),
-            reminderMinutes = obj.optInt("reminderMinutes", 18 * 60).coerceIn(0, 24 * 60 - 1)
+            reminderMinutes = obj.optInt("reminderMinutes", 18 * 60).coerceIn(0, 24 * 60 - 1),
+            weighReminderOn = obj.optBoolean("weighReminderOn", false),
+            weighReminderMinutes = obj.optInt("weighReminderMinutes", 7 * 60 + 30).coerceIn(0, 24 * 60 - 1)
         )
     }
 
@@ -435,6 +437,8 @@ object LocalStorage {
             put("restSoundEnabled", settings.restSoundEnabled)
             put("reminderDays", org.json.JSONArray(settings.reminderDays.sorted()))
             put("reminderMinutes", settings.reminderMinutes)
+            put("weighReminderOn", settings.weighReminderOn)
+            put("weighReminderMinutes", settings.weighReminderMinutes)
             put("themeChoice", settings.themeChoice)
         })
         Units.set(settings.weightUnit)

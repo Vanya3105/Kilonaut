@@ -23,6 +23,13 @@ object WorkoutReminders {
     private const val REQUEST_ALARM = 7300
     private const val ACTION_FIRE = "com.vanyaevtushenko.gymtracker.REMINDER"
 
+    // The morning weigh-in: every day, its own alarm, channel and notification.
+    private const val WEIGH_CHANNEL_ID = "weigh_in_reminders"
+    private const val WEIGH_NOTIFICATION_ID = 7311
+    private const val REQUEST_WEIGH_ALARM = 7310
+    private const val ACTION_WEIGH = "com.vanyaevtushenko.gymtracker.WEIGH_REMINDER"
+    private val EVERY_DAY = (Calendar.SUNDAY..Calendar.SATURDAY).toSet()
+
     /** The next reminder after [nowMillis]: [minutes] past midnight on one of [days] (Calendar.SUNDAY…). */
     internal fun nextAt(days: Set<Int>, minutes: Int, nowMillis: Long): Long? {
         if (days.isEmpty()) return null
@@ -40,24 +47,70 @@ object WorkoutReminders {
         return null
     }
 
-    private fun alarmIntent(context: Context) = PendingIntent.getBroadcast(
-        context, REQUEST_ALARM,
-        Intent(context, ReminderReceiver::class.java).setAction(ACTION_FIRE),
+    private fun alarmIntent(context: Context, request: Int, action: String) = PendingIntent.getBroadcast(
+        context, request,
+        Intent(context, ReminderReceiver::class.java).setAction(action),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    /** Sets the next reminder from the saved settings, or clears it when reminders are off. */
+    /** Sets both reminders from the saved settings, or clears the ones that are off. */
     fun schedule(context: Context) {
         val settings = LocalStorage.loadSettings(context)
         val alarms = context.getSystemService(AlarmManager::class.java) ?: return
-        val pending = alarmIntent(context)
+        val now = System.currentTimeMillis()
+        set(alarms, alarmIntent(context, REQUEST_ALARM, ACTION_FIRE), nextAt(settings.reminderDays, settings.reminderMinutes, now))
+        set(
+            alarms, alarmIntent(context, REQUEST_WEIGH_ALARM, ACTION_WEIGH),
+            if (settings.weighReminderOn) nextAt(EVERY_DAY, settings.weighReminderMinutes, now) else null
+        )
+    }
+
+    private fun set(alarms: AlarmManager, pending: PendingIntent, at: Long?) {
         alarms.cancel(pending)
-        val at = nextAt(settings.reminderDays, settings.reminderMinutes, System.currentTimeMillis()) ?: return
+        if (at == null) return
         // On time when exact alarms are allowed (the rest timer asks for them); otherwise Android may
         // run it up to an hour late, still fine for a nudge.
         val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
         if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
         else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
+    }
+
+    private fun openApp(context: Context, action: String?, request: Int) = PendingIntent.getActivity(
+        context, request,
+        Intent(context, MainActivity::class.java).setAction(action ?: Intent.ACTION_MAIN)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    /** "Morning weigh-in", with Log, unless today's weigh-in is already in. */
+    internal fun fireWeighIn(context: Context) {
+        schedule(context)
+        val today = DateUtils.formatDayKey(Date())
+        if (LocalStorage.loadWeightHistory(context).any { it.dateKey == today }) return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(WEIGH_CHANNEL_ID, tr("Weigh-in reminders"), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = tr("Every morning, at the time you picked")
+                }
+            )
+        }
+        val notification = NotificationCompat.Builder(context, WEIGH_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_workout)
+            .setContentTitle(tr("Morning weigh-in"))
+            .setContentText(tr("Step on the scale before breakfast for the clearest trend."))
+            .setContentIntent(openApp(context, AppShortcuts.LOG_WEIGHT, 7312))
+            .addAction(0, tr("Log"), openApp(context, AppShortcuts.LOG_WEIGHT, 7313))
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .build()
+        runCatching { manager.notify(WEIGH_NOTIFICATION_ID, notification) }
+    }
+
+    /** Weighed in: the morning reminder has done its job. */
+    fun dismissWeighIn(context: Context) {
+        context.getSystemService(NotificationManager::class.java)?.cancel(WEIGH_NOTIFICATION_ID)
     }
 
     internal fun fire(context: Context) {
@@ -76,18 +129,12 @@ object WorkoutReminders {
                 }
             )
         }
-        fun open(action: String?, request: Int) = PendingIntent.getActivity(
-            context, request,
-            Intent(context, MainActivity::class.java).setAction(action ?: Intent.ACTION_MAIN)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_workout)
             .setContentTitle(if (next.isBlank()) tr("Time to train") else tr("Time for {0}", shown(next)))
             .setContentText(tr("Your workout is ready when you are."))
-            .setContentIntent(open(null, 7302))
-            .addAction(0, tr("Start"), open(AppShortcuts.START_NEXT, 7303))
+            .setContentIntent(openApp(context, null, 7302))
+            .addAction(0, tr("Start"), openApp(context, AppShortcuts.START_NEXT, 7303))
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .build()
@@ -100,12 +147,17 @@ object WorkoutReminders {
     }
 
     internal const val FIRE = ACTION_FIRE
+    internal const val WEIGH = ACTION_WEIGH
 }
 
 /** The reminder going off, and the events that clear alarms (restart, update, clock change). */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val app = context.applicationContext
-        if (intent?.action == WorkoutReminders.FIRE) WorkoutReminders.fire(app) else WorkoutReminders.schedule(app)
+        when (intent?.action) {
+            WorkoutReminders.FIRE -> WorkoutReminders.fire(app)
+            WorkoutReminders.WEIGH -> WorkoutReminders.fireWeighIn(app)
+            else -> WorkoutReminders.schedule(app)
+        }
     }
 }

@@ -9,6 +9,8 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Weigh-in reminder** (branch `weigh-reminder`, on top of master, not tested on the phone yet): Profile → Reminders → Morning weigh-in, with its own time (default 7:30). Every day, not once that day's weigh-in is in; Log opens the weigh-in sheet. The reminders' time picker uses the app's colours.
+
 **Polish 4** (branch `polish-4`) is tested on the owner's phone and merged (2026-11-07):
 - [x] Body-weight chart: one weigh-in per day (several on a day made a vertical spike); weigh-ins list shows the time. History month: days to come recede.
 - [x] App shortcuts (long-press the icon): Start the next day / Resume the running one, Empty workout, Log body weight (`AppShortcuts`; the activity hands the action to the app).

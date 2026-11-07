@@ -58,6 +58,19 @@ class RemindersTest {
     }
 
     @Test
+    fun weighIn_remindsUntilTodaysWeighInIsIn() {
+        WorkoutReminders.fireWeighIn(context)
+        assertEquals(1, notifications.size)
+        assertEquals("Morning weigh-in", notifications[0].extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertEquals("Log", notifications[0].actions[0].title.toString())
+
+        WorkoutReminders.dismissWeighIn(context)
+        LocalStorage.addWeightLog(context, 80f)
+        WorkoutReminders.fireWeighIn(context)
+        assertEquals("already weighed in today", 0, notifications.size)
+    }
+
+    @Test
     fun defaultDays_spreadOverTheWeek() {
         assertEquals(setOf(Calendar.MONDAY, Calendar.WEDNESDAY, Calendar.FRIDAY), defaultReminderDays(3))
         assertEquals(5, defaultReminderDays(5).size)
