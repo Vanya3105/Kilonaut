@@ -80,4 +80,16 @@ class UndoTest {
         assertEquals(day, LocalStorage.loadTemplateForSplit(context, "Push"))
         assertEquals(ExerciseTarget(4, 6, 8), LocalStorage.getTarget(context, "Push", "Overhead Press"))
     }
+
+    @Test
+    fun workoutNotes_areKeptAndTravelInBackups() {
+        LocalStorage.saveCompletedWorkout(context, workout(1))
+        LocalStorage.setWorkoutNote(context, 1, "  Felt strong  ")
+        assertEquals("Felt strong", LocalStorage.getWorkoutNote(context, 1))
+        val backup = LocalStorage.exportJsonBackupString(context)
+        LocalStorage.setWorkoutNote(context, 1, "")
+        assertEquals("", LocalStorage.getWorkoutNote(context, 1))
+        LocalStorage.importJsonBackupString(context, backup)
+        assertEquals("Felt strong", LocalStorage.getWorkoutNote(context, 1))
+    }
 }

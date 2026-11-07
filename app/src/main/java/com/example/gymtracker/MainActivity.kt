@@ -642,8 +642,10 @@ fun GymTrackerApp(
                                 editingPastWorkout = null
                                 currentExercises = LocalStorage.loadActiveSession(context)?.second ?: emptyList()
                             },
-                            onFinishWorkout = { _, photoPath, skipped ->
+                            initialNote = remember(editing.id) { LocalStorage.getWorkoutNote(context, editing.id) },
+                            onFinishWorkout = { _, photoPath, skipped, note ->
                                 haptics.confirm()
+                                LocalStorage.setWorkoutNote(context, editing.id, note)
                                 val updated = buildCompletedWorkout(
                                     editing.copy(photoPath = photoPath, skippedExercises = skipped),
                                     currentExercises,
@@ -706,9 +708,10 @@ fun GymTrackerApp(
                                 haptics.tick()
                                 discardActiveWorkout()
                             },
-                            onFinishWorkout = { durationSecs, photoPath, skipped ->
+                            onFinishWorkout = { durationSecs, photoPath, skipped, note ->
                                 haptics.confirm()
                                 val now = Date()
+                                LocalStorage.setWorkoutNote(context, now.time, note)
                                 val completed = buildCompletedWorkout(
                                     CompletedWorkout(
                                         id = now.time,

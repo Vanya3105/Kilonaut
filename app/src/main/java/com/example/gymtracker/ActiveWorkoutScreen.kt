@@ -67,6 +67,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -122,7 +124,9 @@ fun ActiveWorkoutScreen(
     onRemoveExercisePermanently: (String) -> Unit,
     onMinimize: () -> Unit,
     onDiscardWorkout: () -> Unit,
-    onFinishWorkout: (durationSec: Long, photoPath: String?, skipped: List<String>) -> Unit
+    onFinishWorkout: (durationSec: Long, photoPath: String?, skipped: List<String>, note: String) -> Unit,
+    /** The note a past workout already has. */
+    initialNote: String = ""
 ) {
     val P = LocalPalette.current
     val context = LocalContext.current
@@ -137,6 +141,7 @@ fun ActiveWorkoutScreen(
     // A set ticked while earlier work sets of the same exercise aren't: (card, set, the earlier ones).
     var tickingAhead by remember { mutableStateOf<Triple<Int, Int, List<Int>>?>(null) }
     var photoPath by rememberSaveable { mutableStateOf(initialPhotoPath) }
+    var note by rememberSaveable { mutableStateOf(initialNote) }
     var finalDuration by rememberSaveable { mutableLongStateOf(initialDurationSeconds) }
     var banner by remember { mutableStateOf<Banner?>(null) }
     val editor = remember { SetEditor() }
@@ -675,6 +680,8 @@ fun ActiveWorkoutScreen(
             isEditing = isEditingPastWorkout,
             durationSeconds = finalDuration,
             photoPath = photoPath,
+            note = note,
+            onNoteChange = { note = it },
             onUnskipAll = {
                 onUpdateExercises(latestExercises.map { it.copy(isSkipped = false) })
                 showFinish = false
@@ -693,7 +700,7 @@ fun ActiveWorkoutScreen(
             onGallery = { galleryLauncher.launch("image/*") },
             onSave = {
                 showFinish = false
-                onFinishWorkout(finalDuration, photoPath, skipped.map { it.value.name })
+                onFinishWorkout(finalDuration, photoPath, skipped.map { it.value.name }, note)
             },
             onDismiss = { showFinish = false }
         )
@@ -1412,6 +1419,8 @@ private fun FinishSheet(
     isEditing: Boolean,
     durationSeconds: Long,
     photoPath: String?,
+    note: String,
+    onNoteChange: (String) -> Unit,
     onUnskipAll: () -> Unit,
     onClearPhoto: () -> Unit,
     onCamera: () -> Unit,
@@ -1535,6 +1544,8 @@ private fun FinishSheet(
             }
 
             Spacer(Modifier.height(16.dp))
+            NoteField(note, onNoteChange)
+            Spacer(Modifier.height(16.dp))
             val preview = remember(photoPath) { PhotoStorage.loadImageBitmap(photoPath) }
             if (preview != null) {
                 Box(Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp))) {
@@ -1599,4 +1610,25 @@ private fun FinishBadge(trophy: Boolean) {
             modifier = Modifier.size(32.dp)
         )
     }
+}
+
+
+/** How the workout went, in a line or two: shown on its History card. */
+@Composable
+private fun NoteField(note: String, onChange: (String) -> Unit) {
+    val P = LocalPalette.current
+    Text(tr("Note (optional)"), style = AppType.label, color = P.textSecondary)
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = note,
+        onValueChange = { if (it.length <= 500) onChange(it) },
+        placeholder = { Text(tr("How did it go? Anything to remember next time?"), style = AppType.body, color = P.textTertiary) },
+        textStyle = AppType.body.copy(color = P.textPrimary),
+        minLines = 2,
+        maxLines = 5,
+        shape = RoundedCornerShape(14.dp),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = P.accentPrimary, unfocusedBorderColor = P.borderStrong),
+        modifier = Modifier.fillMaxWidth()
+    )
 }

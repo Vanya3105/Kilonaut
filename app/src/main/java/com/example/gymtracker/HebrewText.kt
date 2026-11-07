@@ -880,6 +880,8 @@ internal object HebrewText {
         m["{0}: {1}"] = "{0}: {1}"
         m["empty"] = "ריק"
         m["Plates"] = "פלטות"
+        m["Note (optional)"] = "הערה (לא חובה)"
+        m["How did it go? Anything to remember next time?"] = "איך היה? משהו לזכור לפעם הבאה?"
         m["Kilonaut {0} is out"] = "Kilonaut {0} יצאה"
         m["Your workouts stay as they are."] = "האימונים שלכם נשארים כמו שהם."
         m["Download"] = "הורדה"

@@ -363,6 +363,15 @@ object LocalStorage {
 
     // --- Widget settings (one entry per placed widget) ---
 
+    /** A workout's own note ("felt strong", "left shoulder"), by workout id; "" when none. Kept in the JSON store, so backups carry it. */
+    fun getWorkoutNote(context: Context, workoutId: Long): String =
+        root(context).optJSONObject("workoutNotes")?.optString(workoutId.toString()).orEmpty()
+
+    fun setWorkoutNote(context: Context, workoutId: Long, note: String) = edit(context) { root ->
+        val all = root.optJSONObject("workoutNotes") ?: JSONObject().also { root.put("workoutNotes", it) }
+        if (note.isBlank()) all.remove(workoutId.toString()) else all.put(workoutId.toString(), note.trim())
+    }
+
     fun loadWidgetSettings(context: Context, appWidgetId: Int, kind: String): WidgetSettings {
         val obj = root(context).optJSONObject("widgetSettings")?.optJSONObject(appWidgetId.toString())
             ?: return defaultWidgetSettings(kind)

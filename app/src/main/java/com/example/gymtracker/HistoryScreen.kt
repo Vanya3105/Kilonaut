@@ -387,6 +387,17 @@ fun WorkoutHistoryCard(
             if (workout.totalVolumeKg > 0) Pill(formatVolume(workout.totalVolumeKg))
         }
         ExerciseSummary(rows)
+        val note = remember(workout, allHistory) { LocalStorage.getWorkoutNote(context, workout.id) }
+        if (note.isNotBlank()) {
+            Text(
+                "“$note”",
+                style = AppType.body,
+                color = P.textSecondary,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+        }
         // From the watch via Health Connect; keyed on the permissions so it appears once allowed.
         val heart by produceState<HeartRateSummary?>(null, workout.id, HealthSync.granted) {
             value = HealthSync.heartRate(context, workout)
