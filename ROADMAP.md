@@ -14,6 +14,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 - [x] Status bar icons stay dark on light pages after the splash; the status bar backdrop is solid with a soft fade.
 - [x] Consistency calendar fills in and counts up; today ringed. Profile's training card as goal + chips. Centred set headers; done sets as one green line; no "0 ×" in History.
 - [x] Watch: heart rate from the watch's sensor on the rest screen (asked once, at the first workout; only while on screen), 3-2-1 taps before rest ends, Add set / One more set (phone: `WatchAction.ADD_SET`, `WatchState.addSetTo`), round rest buttons that fit a 40 mm watch, fading name edges, no doubled "reps".
+- [x] Body-weight chart: 1M/3M/6M/1Y/All (only ranges that add something), dates spaced by time, round gridlines with values, a smoothed trend with each weigh-in as a dot from 8 weigh-ins (straight, honest lines below that), drag to scrub (the big number follows), lowest/highest/average; draws in along its length, the scale glides between ranges. `WeightChartTest` renders it to app/build/screenshots.
 - Owner to test: the phone app and the watch app (install both). Then release 3.9.0.
 
 **Polish 2** (branch `polish-2`) is tested on the owner's phone and merged (2026-11-07): Plates button on the keypad, Hebrew keypad, new bests counted per exercise, the running workout named after a split change, clearer training max hint, split builder suggestions. Not released yet (master is ahead of v3.8.0).

@@ -4,6 +4,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -142,6 +143,7 @@ fun ProgressScreen(
             BodyWeightCard(
                 current = userProfile.currentWeightKg,
                 weightHistory = weightHistory,
+                haptics = haptics,
                 onLog = { haptics.tick(); showLogSheet = true },
                 modifier = Modifier.enterAnimation(3)
             )
@@ -240,48 +242,102 @@ private fun computeBestLifts(history: List<CompletedWorkout>): List<BestLift> {
 }
 
 @Composable
-private fun BodyWeightCard(current: Float, weightHistory: List<WeightLogEntry>, onLog: () -> Unit, modifier: Modifier = Modifier) {
+internal fun BodyWeightCard(current: Float, weightHistory: List<WeightLogEntry>, haptics: Haptics, onLog: () -> Unit, modifier: Modifier = Modifier) {
     val P = LocalPalette.current
-    val shown = weightHistory.take(8).reversed()
-    val points = shown.map { DateUtils.shortDayOf(it.displayDate, it.id) to it.weightKg }
-    // The same span as the chart below, so the arrow and the line agree.
+    val now = remember(weightHistory) { System.currentTimeMillis() }
+    val ranges = remember(weightHistory, now) { usefulWeightRanges(weightHistory, now) }
+    var rangeKey by rememberSaveable { mutableStateOf(WeightRange.QUARTER.name) }
+    // The chosen range if it's offered, else three months, else the longest there is.
+    val range = ranges.firstOrNull { it.name == rangeKey }
+        ?: ranges.firstOrNull { it == WeightRange.QUARTER } ?: ranges.lastOrNull() ?: WeightRange.ALL
+    val shown = remember(weightHistory, range, now) { weighInsIn(range, weightHistory, now) }
+    var picked by remember(shown) { mutableStateOf<Int?>(null) }
+    val pickedEntry = picked?.let { shown.getOrNull(it) }
+
+    // The same span as the chart, so the arrow and the line agree.
     val first = shown.firstOrNull()
-    val (change, since) = if (shown.size >= 2 && first != null && current > 0f) {
-        (current - first.weightKg) to tr("since {0}", DateUtils.shortDayOf(first.displayDate, first.id))
-    } else null to ""
+    val change = if (shown.size >= 2 && first != null && current > 0f) current - first.weightKg else null
+    val unit = Units.current.label
 
     AppCard(modifier.fillMaxWidth(), elevated = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(tr("Body weight"), style = AppType.label, color = P.textSecondary)
                 Row(verticalAlignment = Alignment.Bottom) {
-                    RollingText(formatWeightNumber(current), AppType.bigNumber, P.textPrimary)
-                    Text(" ${Units.current.label}", style = AppType.body, color = P.textSecondary, modifier = Modifier.padding(bottom = 3.dp))
+                    // Following a finger it changes every few pixels: no rolling then.
+                    if (pickedEntry != null) Text(formatWeightNumber(pickedEntry.weightKg), style = AppType.bigNumber, color = P.textPrimary)
+                    else RollingText(formatWeightNumber(current), AppType.bigNumber, P.textPrimary)
+                    Text(" $unit", style = AppType.body, color = P.textSecondary, modifier = Modifier.padding(bottom = 3.dp))
                 }
-                if (change != null) {
-                    val rounded = roundedChange(change)
-                    val unit = Units.current.label
-                    val (icon, text) = when {
-                        rounded > 0f -> Icons.AutoMirrored.Rounded.TrendingUp to "+${formatKgClean(rounded)} $unit $since"
-                        rounded < 0f -> Icons.AutoMirrored.Rounded.TrendingDown to "−${formatKgClean(abs(rounded))} $unit $since"
-                        else -> Icons.AutoMirrored.Rounded.TrendingFlat to tr("No change {0}", since)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(icon, null, tint = P.textSecondary, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(text, style = AppType.caption, color = P.textSecondary)
+                when {
+                    pickedEntry != null -> Text(
+                        DateUtils.shortDayYearOf(pickedEntry.displayDate, pickedEntry.id),
+                        style = AppType.caption, color = P.accentPrimary
+                    )
+                    change != null && first != null -> {
+                        val rounded = roundedChange(change)
+                        val since = tr("since {0}", DateUtils.shortDayOf(first.displayDate, first.id))
+                        val (icon, text) = when {
+                            rounded > 0f -> Icons.AutoMirrored.Rounded.TrendingUp to "+${formatKgClean(rounded)} $unit $since"
+                            rounded < 0f -> Icons.AutoMirrored.Rounded.TrendingDown to "−${formatKgClean(abs(rounded))} $unit $since"
+                            else -> Icons.AutoMirrored.Rounded.TrendingFlat to tr("No change {0}", since)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(icon, null, tint = P.textSecondary, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(text, style = AppType.caption, color = P.textSecondary)
+                        }
                     }
                 }
             }
             PrimaryButton(tr("Log"), onLog, icon = Icons.Rounded.Add, height = 44.dp)
         }
-        if (points.size >= 2) {
-            Spacer(Modifier.height(16.dp))
-            TrendChart(points)
+        if (shown.size >= 2) {
+            if (ranges.size > 1) {
+                Spacer(Modifier.height(16.dp))
+                SegmentedControl(
+                    options = ranges.map { it to it.label },
+                    selected = range,
+                    onSelect = { if (it != range) haptics.tick(); rangeKey = it.name }
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            // From the first weigh-in shown (no empty stretch before it) up to today; "All" ends at the last one.
+            val start = shown.first().id
+            val end = if (range == WeightRange.ALL) shown.last().id else maxOf(now, shown.last().id)
+            if (shown.size >= TREND_FROM) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(P.accentPrimary.copy(alpha = 0.35f)))
+                    Spacer(Modifier.width(5.dp))
+                    Text(tr("Weigh-ins"), style = AppType.caption, color = P.textTertiary)
+                    Spacer(Modifier.width(12.dp))
+                    Box(Modifier.size(width = 12.dp, height = 2.5.dp).clip(CircleShape).background(P.accentPrimary))
+                    Spacer(Modifier.width(5.dp))
+                    Text(tr("Trend"), style = AppType.caption, color = P.textTertiary)
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+            WeightChart(shown, start, end, picked, { picked = it }, haptics)
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth()) {
+                val kg = shown.map { it.weightKg }
+                WeightStat(tr("Lowest"), formatWeightKg(kg.min()), Modifier.weight(1f))
+                WeightStat(tr("Highest"), formatWeightKg(kg.max()), Modifier.weight(1f))
+                WeightStat(tr("Average"), formatWeightKg(kg.average().toFloat()), Modifier.weight(1f))
+            }
         } else {
             Spacer(Modifier.height(12.dp))
             Text(tr("Log your weight a few times to see a trend."), style = AppType.caption, color = P.textTertiary)
         }
+    }
+}
+
+@Composable
+private fun WeightStat(label: String, value: String, modifier: Modifier) {
+    val P = LocalPalette.current
+    Column(modifier) {
+        Text(label, style = AppType.caption, color = P.textSecondary)
+        Text(value, style = AppType.label.copy(fontFeatureSettings = "tnum"), color = P.textPrimary)
     }
 }
 
