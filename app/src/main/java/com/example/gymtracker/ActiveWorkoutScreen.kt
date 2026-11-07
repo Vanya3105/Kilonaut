@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -952,6 +953,19 @@ private fun ExerciseCard(
                             }
                         )
                     }
+                    if (exercise.type == ExerciseType.WEIGHT_REPS && exercise.sets.none { it.isWarmupSet && it.isCompleted }) {
+                        val context = LocalContext.current
+                        DropdownMenuItem(
+                            text = { Text(tr("Warm-up sets"), style = AppType.body) },
+                            leadingIcon = { Icon(Icons.Rounded.Whatshot, null) },
+                            onClick = {
+                                menuOpen = false
+                                haptics.tick()
+                                val bar = if (usesPlates(exercise.name, exercise.type)) LocalStorage.loadPlateSetup(context, Units.current).barWeight else null
+                                onUpdate { ex -> withWarmups(ex, settings.weightStep, bar) }
+                            }
+                        )
+                    }
                     HorizontalDivider(color = P.borderSubtle)
                     DropdownMenuItem(
                         text = { Text(tr("Skip for today"), style = AppType.body) },
@@ -1631,4 +1645,34 @@ private fun NoteField(note: String, onChange: (String) -> Unit) {
         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = P.accentPrimary, unfocusedBorderColor = P.borderStrong),
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+
+/**
+ * Replaces the exercise's warm-ups with a ramp to its first work set: the empty bar for bar lifts,
+ * then about 50%, 70% and 85% for fewer and fewer reps (a common pattern: warm, not tired).
+ * Weights round down to [stepDisplay]; steps that come out at the bar or at the work weight are left out.
+ * [barDisplay] is the bar in the display unit, null when there's no bar.
+ */
+internal fun withWarmups(ex: ExerciseEntry, stepDisplay: Float, barDisplay: Float?): ExerciseEntry {
+    val unit = Units.current
+    val work = ex.sets.firstOrNull { !it.isWarmupSet && it.intensityType == "NORMAL" } ?: return ex
+    val workDisplay = unit.fromKg(work.weightKg)
+    if (workDisplay <= 0f) return ex
+    fun down(v: Float) = if (stepDisplay > 0f) (v / stepDisplay).toInt() * stepDisplay else v
+    val ramp = buildList {
+        if (barDisplay != null && barDisplay > 0f && workDisplay > barDisplay * 1.5f) add(barDisplay to 10)
+        listOf(0.5f to 5, 0.7f to 3, 0.85f to 1).forEach { (pct, reps) ->
+            val w = down(workDisplay * pct)
+            if (w > (lastOrNull()?.first ?: 0f) && w < workDisplay && (barDisplay == null || w > barDisplay)) add(w to reps)
+        }
+    }
+    if (ramp.isEmpty()) return ex
+    val rest = minOf(60, work.restSeconds.takeIf { it > 0 } ?: ex.restSeconds)
+    val warmups = ramp.map { (w, reps) ->
+        SetEntry(0, weight = unit.stored(w), reps = "$reps", isWarmup = true, intensityType = "WARMUP", restSeconds = rest)
+    }
+    // Done warm-ups stay; unticked ones are replaced.
+    val kept = ex.sets.filter { !(it.isWarmupSet && !it.isCompleted) }
+    return ex.copy(sets = (warmups + kept).mapIndexed { i, s -> s.copy(setNumber = i + 1) })
 }
