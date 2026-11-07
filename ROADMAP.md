@@ -9,7 +9,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**Small extras** (branch `small-extras`, on top of master, not tested on the phone yet). Version is now 3.9.0 (code 39).
+**Small extras** (branch `small-extras`) is tested on the owner's phone and merged (2026-11-07). Version is now 3.9.0 (code 39).
 - [x] What's new: a sheet once after an update (not on a fresh install), notes per version in `WhatsNew.notesFor`; never over onboarding or a workout.
 - [x] About: Share Kilonaut (Play link for Play installs, else the website); Rate on Google Play for Play installs only.
 - [x] Effort per set (Workouts → Effort per set, off by default): "Reps left? 0 1 2 3 4+" under the set just ticked; stored as `SetEntry.rir` (Room v6, auto-migration; backups and the running workout carry it); shown on the exercise page's sessions.
