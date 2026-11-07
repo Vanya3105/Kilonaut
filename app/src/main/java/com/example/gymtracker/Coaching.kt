@@ -215,6 +215,12 @@ internal fun recoveryLeft(baseHours: Float, sets: Float, hours: Float): Float {
 // add weight. How much comes from the estimated 1RM, capped near 10% (ACSM: 2–10% once you beat
 // the target by a rep or two). Misses below the range, stalls and long breaks bring it down.
 // Everything here works in the display unit, so steps and rounding land on real plates.
+//
+// Effort ("reps left", RIR), when the lifter records it, refines this. RIR-based loading beats
+// fixed loading for strength (Helms et al. 2018; Graham & Cleather 2020), and growth is best with
+// work sets about 1-3 reps short of failure (Robinson et al. 2024), so new weights aim to leave
+// TARGET_RIR in the tank. People underestimate their reserve by about a rep (Halperin et al. 2021):
+// taken as said, it errs toward lighter. Ratings are only trusted on sets of up to 15 reps.
 
 private const val DAY_MS = 24L * 60 * 60 * 1000
 
@@ -222,6 +228,12 @@ private const val DAY_MS = 24L * 60 * 60 * 1000
 private const val DEFAULT_BODY_KG = 75f
 
 /** The rep range coaching aims for. */
+/** Reps to leave in the tank on a work set: the middle of the 1-3 that grows muscle best. */
+private const val TARGET_RIR = 2
+
+/** Above this many reps, "reps left" guesses get unreliable. */
+private const val MAX_RATED_REPS = 15
+
 private class RepGoal(val min: Int, val max: Int) {
     val text: String get() = if (min == max) "$min" else "$min–$max"
     val mid: Int get() = (min + max + 1) / 2
@@ -239,6 +251,52 @@ private class Session(val time: Long, sets: List<SetEntry>, unit: WeightUnit, bo
     val totalReps get() = reps.sum()
     // Epley gets unreliable past ~15 reps, where it overstates the max.
     val e1rm = sets.maxOf { calculateEstimated1Rm(unit.fromKg(it.weightKg) + bodyLoad, it.repCount.coerceAtMost(15)) }
+    /** Reps left on the top-weight sets that have it recorded (4 = four or more). */
+    val rirs = sets.filter { unit.fromKg(it.weightKg) >= weight - 0.01f && it.rir >= 0 && it.repCount in 1..MAX_RATED_REPS }.map { it.rir }
+    /** The max from reps plus reps left (what the set would have been to failure); the plain one without ratings. */
+    val effortE1rm = sets.filter { it.rir >= 0 && it.repCount in 1..MAX_RATED_REPS }
+        .maxOfOrNull { calculateEstimated1Rm(unit.fromKg(it.weightKg) + bodyLoad, (it.repCount + it.rir).coerceAtMost(MAX_RATED_REPS)) } ?: e1rm
+}
+
+/**
+ * The next session's weight from how hard the last one felt, or null to decide on reps alone.
+ * Up more when every set reached the top with reps to spare, only a step when it took going to
+ * failure, and up anyway when every set stopped well short of failure.
+ */
+private fun planFromEffort(last: Session, goal: RepGoal, step: Float, bodyLoad: Float, unit: WeightUnit, whenText: String, nextTime: Boolean): Suggestion? {
+    val rirs = last.rirs.ifEmpty { return null }
+    val w = last.weight
+    if (w <= 0f) return null
+    fun shown(v: Float) = "${formatKgClean(unit.round(v))} ${unit.label}"
+    fun make(v: Float, tone: SuggestionTone, message: String) =
+        Suggestion(message, tone, unit.stored(unit.round(v.coerceAtLeast(0f))), forNextTime = nextTime)
+    // One step on a light dumbbell can be 20%+: never more than that one step there.
+    val bigStep = (w + bodyLoad) > 0f && step / (w + bodyLoad) > 0.10f
+    /** The weight for the middle of the range with TARGET_RIR left, at least a step up and at most ~10%. */
+    fun upTo(): Float {
+        if (bigStep) return w + step
+        // To the nearest plate, not down: the reserve is shown, and is usually a rep more than said.
+        val aim = nearestTo(weightFor(last.effortE1rm, goal.mid + TARGET_RIR, bodyLoad), step)
+        val cap = maxOf(floorTo(w * 1.10f, step), w + step)
+        return aim.coerceIn(w + step, cap)
+    }
+    val minRir = rirs.min()
+    val spare = if (minRir >= 4) "4" else "$minRir"
+    return when {
+        last.minReps >= goal.max && minRir >= 2 -> {
+            val up = upTo()
+            make(up, SuggestionTone.GOOD, tr("Every set hit {0}+ with {1}+ reps to spare. Go up to {2} {3}.", goal.max, spare, shown(up), whenText))
+        }
+        last.minReps >= goal.max && rirs.any { it == 0 } -> {
+            val up = w + step
+            make(up, SuggestionTone.GOOD, tr("You reached {0} reps at {1}, but only by going to failure. Go up one step to {2} {3}.", goal.max, shown(w), shown(up), whenText))
+        }
+        last.firstReps >= goal.min && last.minReps < goal.max && minRir >= 3 && !bigStep -> {
+            val up = upTo()
+            make(up, SuggestionTone.GOOD, tr("You stopped with {0}+ reps left on every set. Go up to {1} {2} and finish 1–2 reps short of failure.", spare, shown(up), whenText))
+        }
+        else -> null
+    }
 }
 
 /** Reps expected at [weight] from an estimated 1RM (Epley, inverted). */
@@ -246,6 +304,9 @@ private fun repsAt(e1rm: Float, weight: Float, bodyLoad: Float): Float = 30f * (
 
 /** The weight that should allow [reps] reps from an estimated 1RM. */
 private fun weightFor(e1rm: Float, reps: Int, bodyLoad: Float): Float = e1rm / (1f + reps / 30f) - bodyLoad
+
+private fun nearestTo(value: Float, step: Float): Float =
+    if (step <= 0f) value else (kotlin.math.round(value / step) * step).coerceAtLeast(0f)
 
 private fun floorTo(value: Float, step: Float): Float =
     if (step <= 0f) value else (floor(value / step + 0.001f) * step).coerceAtLeast(0f)
@@ -351,6 +412,19 @@ private fun inSession(done: List<SetEntry>, goal: RepGoal, step: Float, unit: We
         val heavier = maxOf(w + step, minOf(floorTo(weightFor(e1rm, goal.mid, bodyLoad), step), floorTo(w * 1.15f, step)))
         return make(heavier, SuggestionTone.GOOD, tr("{0} reps is light for {1}. Go up to {2} for the next sets.", latest.repCount, goal.text, shown(heavier)))
     }
+    // The set just rated: what it would have been to failure says what the next ones should weigh.
+    if (latest.rir >= 0 && latest.repCount in 1..MAX_RATED_REPS && w > 0f) {
+        val toFailure = calculateEstimated1Rm(w + bodyLoad, (latest.repCount + latest.rir).coerceAtMost(MAX_RATED_REPS))
+        if (latest.rir >= 3 && latest.repCount >= goal.min) {
+            val heavier = maxOf(w + step, minOf(nearestTo(weightFor(toFailure, goal.mid + TARGET_RIR, bodyLoad), step), floorTo(w * 1.15f, step)))
+            val spare = if (latest.rir >= 4) "4" else "${latest.rir}"
+            return make(heavier, SuggestionTone.GOOD, tr("{0} reps with {1}+ left is light for {2}. Use {3} for the next sets and finish 1–2 reps short of failure.", latest.repCount, spare, goal.text, shown(heavier)))
+        }
+        if (latest.rir == 0 && straight.size == 1 && latest.repCount < goal.max) {
+            val lighter = minOf(w - step, floorTo(weightFor(toFailure, goal.min + TARGET_RIR, bodyLoad), step)).coerceAtLeast(0f)
+            return make(w, SuggestionTone.CAUTION, tr("Set 1 went to failure. Stay at {0} and expect a rep or two fewer, or use {1} to stay in {2}.", shown(w), shown(lighter), goal.text))
+        }
+    }
     return null
 }
 
@@ -392,6 +466,8 @@ private fun plan(
         else tr("Only {0} reps at {1} {2}, well under {3}.", last.firstReps, shown(w), lastText, goal.text)
         return make(down, SuggestionTone.CAUTION, tr("{0} Drop to {1} {2} and build back up.", why, shown(down), whenText))
     }
+
+    planFromEffort(last, goal, step, bodyLoad, unit, whenText, nextTime)?.let { return it }
 
     if (sessions.size >= 3 && w > 0f) {
         val three = sessions.take(3)

@@ -245,4 +245,60 @@ class CoachingTest {
         assertEquals("0", lighterWeight("0", 2.5f))
         assertNotNull(lighterWeight("", 2.5f))
     }
+
+    // --- Effort (reps left) ---
+
+    private fun rated(weight: String, vararg repsAndRir: Pair<Int, Int>) =
+        repsAndRir.map { (reps, rir) -> SetEntry(1, weight, "$reps", isCompleted = true, rir = rir) }
+
+    @Test
+    fun topOfRange_withRoomToSpare_jumpsMoreThanAStep() {
+        // 3×10 at 60 with 3 left each: the lifter had ~13 in them, so the next weight is for the middle of the range, 2 short.
+        val advice = next(history("Bench Press", rated("60", 10 to 3, 10 to 3, 10 to 3)))
+        assertEquals(SuggestionTone.GOOD, advice.tone)
+        assertTrue("more than one step: ${advice.suggestedWeight}", advice.suggestedWeight.toFloat() > 62.5f)
+        assertTrue("never more than ~10%", advice.suggestedWeight.toFloat() <= 66f)
+    }
+
+    @Test
+    fun topOfRange_onlyByFailing_isOneStep() {
+        val advice = next(history("Bench Press", rated("60", 10 to 1, 10 to 0, 10 to 0)))
+        assertEquals("62.5", advice.suggestedWeight)
+        assertTrue(advice.message.contains("failure"))
+    }
+
+    @Test
+    fun midRange_butWellShortOfFailure_goesUpAnyway() {
+        // Without effort this would hold at 60 ("add a rep").
+        val advice = next(history("Bench Press", rated("60", 8 to 3, 8 to 4, 8 to 3)))
+        assertEquals(SuggestionTone.GOOD, advice.tone)
+        assertTrue(advice.suggestedWeight.toFloat() > 60f)
+    }
+
+    @Test
+    fun midRange_closeToFailure_holds() {
+        val advice = next(history("Bench Press", rated("60", 8 to 1, 7 to 1, 7 to 0)))
+        assertEquals("60", advice.suggestedWeight)
+    }
+
+    @Test
+    fun noRatings_behavesAsBefore() {
+        assertEquals("62.5", next(history("Bench Press", sets("60", 10, 10, 10))).suggestedWeight)
+    }
+
+    @Test
+    fun duringTheWorkout_aLightRatedSet_raisesTheRest() {
+        val today = bench(SetEntry(1, "60", "8", isCompleted = true, rir = 4), set("60", "8", done = false), set("60", "8", done = false))
+        val advice = suggestNextWeight("Push", today, emptyList(), 2.5f, now)!!
+        assertEquals(SuggestionTone.GOOD, advice.tone)
+        assertTrue(advice.suggestedWeight.toFloat() > 60f)
+    }
+
+    @Test
+    fun duringTheWorkout_firstSetToFailure_holdsWithAWarning() {
+        val today = bench(SetEntry(1, "60", "7", isCompleted = true, rir = 0), set("60", "8", done = false), set("60", "8", done = false))
+        val advice = suggestNextWeight("Push", today, emptyList(), 2.5f, now)!!
+        assertEquals(SuggestionTone.CAUTION, advice.tone)
+        assertEquals("60", advice.suggestedWeight)
+    }
 }

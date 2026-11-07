@@ -9,6 +9,8 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Smarter coaching from effort** (branch `smart-effort`, on top of `one-calendar`, not tested on the phone yet): "reps left" now drives the weight advice (`planFromEffort`, `inSession`). Next time: top of the range with 2+ to spare → up to the weight for the range's middle with 2 left (nearest plate, at most ~10%); top only by going to failure → one step; mid-range with 3+ left on every set → up anyway. During a workout: a set with 3+ left raises the rest; set 1 to failure → hold, with a lighter option. Science in the comment above WEIGHT SUGGESTIONS (Helms 2018, Graham & Cleather 2020, Robinson 2024, Halperin 2021). Without ratings nothing changes; history and records stay rep-based.
+
 **One calendar** (branch `one-calendar`, on top of `pro-pass`, not tested on the phone yet): the training-days grid (now 26 weeks, `TrainingDaysCard`) moved from Progress to the top of History; tapping a day opens it in History's month calendar, which rings it on the grid. Progress keeps the streak and counts (`ConsistencyCard`), and a tap opens History.
 
 **Professional pass** (branch `pro-pass`, not tested on the phone yet), after the owner worried the app feels childish:
