@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- The workout on the watch face is an ongoing notification. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Heart rate on the rest screen, from the watch's own sensor, only while a workout is on screen.
+         Wear OS 6 (API 36) asks for it by its Health Connect name instead of body sensors. -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" android:maxSdkVersion="35" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
 
     <application
         android:icon="@mipmap/ic_launcher"

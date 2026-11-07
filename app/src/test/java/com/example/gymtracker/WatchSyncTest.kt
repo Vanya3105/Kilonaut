@@ -122,6 +122,24 @@ class WatchSyncTest {
     }
 
     @Test
+    fun addSet_copiesTheExerciseTickedLast_evenWhileTheNextOneIsUp() {
+        startWorkout()
+        assertEquals("before anything is ticked: the current exercise", "Bench Press", watchStateOf(context).addSetTo)
+        WatchSync.apply(context, WatchAction.COMPLETE_SET)
+        WatchSync.apply(context, WatchAction.SKIP_REST)
+        WatchSync.apply(context, WatchAction.COMPLETE_SET)
+        assertEquals("Plank", watchStateOf(context).exerciseName)
+        assertEquals("Bench Press", watchStateOf(context).addSetTo)
+
+        WatchSync.apply(context, WatchAction.ADD_SET)
+        val s = watchStateOf(context)
+        assertEquals("the new set is next", "Bench Press", s.exerciseName)
+        assertEquals("Set 3", s.setLabel)
+        assertEquals("80 kg", s.primary)
+        assertEquals(WatchExercise("Bench Press", 2, 3), s.exercises[0])
+    }
+
+    @Test
     fun undo_unticksTheLastSet_evenInThePreviousExercise() {
         startWorkout()
         WatchSync.apply(context, WatchAction.COMPLETE_SET)

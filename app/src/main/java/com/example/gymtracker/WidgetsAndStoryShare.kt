@@ -288,7 +288,8 @@ fun watchStateOf(context: Context): WatchState {
         language = watchLanguage(),
         setKind = next?.kind ?: SetKind.WORK,
         workSetNumber = next?.workNumber ?: 0,
-        workSetCount = next?.workCount ?: 0
+        workSetCount = next?.workCount ?: 0,
+        addSetTo = live.exercises.getOrNull(WatchSync.addSetTarget(live.exercises))?.let { shown(it.name) }
     )
 }
 

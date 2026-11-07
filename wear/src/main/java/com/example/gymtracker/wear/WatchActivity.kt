@@ -25,13 +25,16 @@ class WatchActivity : ComponentActivity() {
     }
 
     private lateinit var link: PhoneLink
+    private lateinit var heartRate: HeartRate
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         link = PhoneLink(this)
+        heartRate = HeartRate(this)
         setContent {
             AskForNotifications(link)
-            WatchApp(link)
+            AskForHeartRate(link.state?.active == true, heartRate)
+            WatchApp(link, heartRate)
         }
         // Not again when the activity is recreated (e.g. after a configuration change).
         if (savedInstanceState == null) startFrom(intent)
@@ -55,10 +58,12 @@ class WatchActivity : ComponentActivity() {
         super.onStart()
         visible = true
         link.start()
+        heartRate.setVisible(true)
     }
 
     override fun onStop() {
         visible = false
+        heartRate.setVisible(false)
         link.stop()
         super.onStop()
     }
@@ -80,5 +85,22 @@ private fun AskForNotifications(link: PhoneLink) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             ask.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+}
+
+/**
+ * Heart rate is asked for once, when a workout is first open on the watch, where it's clear what
+ * it's for; a no isn't asked again (the phone's history still gets it through Health Connect).
+ */
+@Composable
+private fun AskForHeartRate(workout: Boolean, heartRate: HeartRate) {
+    val context = LocalContext.current
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { heartRate.permissionChanged() }
+    LaunchedEffect(workout) {
+        if (!workout || HeartRate.granted(context)) return@LaunchedEffect
+        val prefs = context.getSharedPreferences("watch", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("asked_heart_rate", false)) return@LaunchedEffect
+        prefs.edit().putBoolean("asked_heart_rate", true).apply()
+        ask.launch(HeartRate.PERMISSION)
     }
 }

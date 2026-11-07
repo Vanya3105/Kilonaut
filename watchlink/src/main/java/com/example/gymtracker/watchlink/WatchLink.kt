@@ -35,7 +35,9 @@ enum class WatchAction {
     /** Un-ticks the last finished set, e.g. after "Set done" by mistake. */
     UNDO_SET,
     /** Saves the workout to history, like Finish → Save on the phone. */
-    FINISH_WORKOUT
+    FINISH_WORKOUT,
+    /** One more set for [WatchState.addSetTo], a copy of its last set. */
+    ADD_SET
 }
 
 /** What kind of set is next, so the watch can name it in its own language. */
@@ -98,7 +100,9 @@ data class WatchState(
     val setKind: SetKind = SetKind.WORK,
     /** "Set 2 of 3" counting work sets only (warm-ups have no number); 0 when unknown. */
     val workSetNumber: Int = 0,
-    val workSetCount: Int = 0
+    val workSetCount: Int = 0,
+    /** The exercise "Add set" adds to (the one ticked last); null from an older phone app or with nothing to add to. */
+    val addSetTo: String? = null
 ) {
     /** How [days] reads on screen. */
     fun dayLabel(i: Int): String = dayLabels.getOrNull(i)?.takeIf { it.isNotBlank() } ?: days[i]
@@ -131,6 +135,7 @@ data class WatchState(
         put("setKind", setKind.name)
         put("workSet", workSetNumber)
         put("workSets", workSetCount)
+        addSetTo?.let { put("addSetTo", it) }
         lastWorkout?.let { w ->
             put("last", JSONObject().apply {
                 put("workout", w.workoutName)
@@ -174,6 +179,7 @@ data class WatchState(
                 setKind = SetKind.entries.find { it.name == o.optString("setKind") } ?: SetKind.WORK,
                 workSetNumber = o.optInt("workSet"),
                 workSetCount = o.optInt("workSets"),
+                addSetTo = if (o.has("addSetTo")) o.getString("addSetTo") else null,
                 lastWorkout = o.optJSONObject("last")?.let { w ->
                     WatchFinished(
                         workoutName = w.optString("workout"),

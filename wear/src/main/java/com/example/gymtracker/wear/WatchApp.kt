@@ -40,7 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalContext
@@ -87,6 +94,7 @@ import kotlin.math.abs
 private val Orange = Color(0xFFFF6A2B)
 private val Muted = Color(0xFFA1A1AA)
 private val Control = Color(0xFF26262B)
+private val HeartRed = Color(0xFFFF5A5F)
 
 /** Inter, as on the phone (Hebrew falls back to the system font, which has it). */
 private val Inter = FontFamily(
@@ -119,9 +127,10 @@ private const val SAVED_SCREEN_MS = 30 * 60_000L
 private const val ROTARY_STEP_PX = 24f
 
 @Composable
-fun WatchApp(link: PhoneLink) {
+fun WatchApp(link: PhoneLink, heartRate: HeartRate? = null) {
     val haptic = LocalHapticFeedback.current
     val state = link.state
+    LaunchedEffect(state?.active) { heartRate?.setWorkout(state?.active == true) }
     val restEnd = state?.restEndsAtMillis ?: 0L
     // Ticks only while a rest is running.
     val now by produceState(System.currentTimeMillis(), restEnd, state?.active) {
@@ -134,11 +143,16 @@ fun WatchApp(link: PhoneLink) {
     // While the app is on screen; otherwise the phone's "Rest's over" notification buzzes the watch.
     val context = LocalContext.current
     LaunchedEffect(restEnd) {
-        val wait = restEnd - System.currentTimeMillis()
-        if (wait > 0) {
-            delay(wait)
-            buzz(context)
+        if (restEnd <= System.currentTimeMillis()) return@LaunchedEffect
+        // A light tap at 3, 2 and 1 so the wrist knows it's coming, then the full buzz.
+        for (s in 3 downTo 1) {
+            val until = restEnd - s * 1_000L - System.currentTimeMillis()
+            if (until < 0) continue
+            delay(until)
+            if (WatchActivity.visible) tick(context)
         }
+        delay((restEnd - System.currentTimeMillis()).coerceAtLeast(0))
+        buzz(context)
     }
     val since = link.waitingSince
     val slow by produceState(false, since) {
@@ -164,7 +178,8 @@ fun WatchApp(link: PhoneLink) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             link.startWorkout(it)
         },
-        onOpenOnPhone = link::openOnPhone
+        onOpenOnPhone = link::openOnPhone,
+        heartRate = heartRate?.bpm
     )
 }
 
@@ -179,7 +194,8 @@ internal fun WatchScreen(
     onStart: (String) -> Unit,
     onOpenOnPhone: () -> Unit,
     initialOverview: Boolean = false,
-    initialConfirmFinish: Boolean = false
+    initialConfirmFinish: Boolean = false,
+    heartRate: Int? = null
 ) {
     var overview by rememberSaveable { mutableStateOf(initialOverview) }
     var confirmFinish by rememberSaveable { mutableStateOf(initialConfirmFinish) }
@@ -198,9 +214,10 @@ internal fun WatchScreen(
     CompositionLocalProvider(LocalLayoutDirection provides direction) {
     MaterialTheme(colors = Colors(primary = Orange, onPrimary = Color.Black, secondary = Orange, background = Color.Black), typography = WatchTypography) {
         val restEnd = state?.restEndsAtMillis ?: 0L
-        val onSetScreen = active && !overview && !confirmFinish && restEnd <= now && state?.exerciseName != null
-        // The set screen needs the top of the display for the exercise name.
-        Scaffold(Modifier.background(Color.Black), timeText = { if (!onSetScreen) TimeText() }) {
+        // The set screen needs the top of the display for the exercise name, the rest screen for its
+        // countdown (with the heart rate it no longer fit under the time on a 40 mm watch).
+        val fullScreen = active && !overview && !confirmFinish && (restEnd > now || state?.exerciseName != null)
+        Scaffold(Modifier.background(Color.Black), timeText = { if (!fullScreen) TimeText() }) {
             val note = when {
                 !phoneConnected -> t("Phone not connected")
                 waitingForPhone -> t("Waiting for phone…")
@@ -224,12 +241,12 @@ internal fun WatchScreen(
                     BackHandler { overview = false }
                     // Swipe right goes back to the set or rest screen, which shows underneath while swiping.
                     SwipeToDismissBox(onDismissed = { overview = false }) { isBackground ->
-                        if (isBackground) WorkoutScreen(state, now, note, onAction, onOpenOverview = {}, bezel = false)
+                        if (isBackground) WorkoutScreen(state, now, note, heartRate, onAction, onOpenOverview = {}, bezel = false)
                         else Overview(state, now, onAction, onFinish = { confirmFinish = true }, onOpenOnPhone)
                     }
                 }
                 state.exerciseName == null && restEnd <= now -> AllDone(state, note, onAction, onFinish = { confirmFinish = true }, onOpenOverview = { overview = true })
-                else -> WorkoutScreen(state, now, note, onAction, onOpenOverview = { overview = true })
+                else -> WorkoutScreen(state, now, note, heartRate, onAction, onOpenOverview = { overview = true })
             }
         }
     }
@@ -241,14 +258,20 @@ private fun WorkoutScreen(
     state: WatchState,
     now: Long,
     note: String?,
+    heartRate: Int?,
     onAction: (WatchAction) -> Unit,
     onOpenOverview: () -> Unit,
     // Off for the copy drawn under the overview, which would take the bezel from its list.
     bezel: Boolean = true
 ) {
     val restEnd = state.restEndsAtMillis
-    if (restEnd > now) RestScreen(state, restEnd - now, note, bezel, onAction, onOpenOverview)
+    if (restEnd > now) RestScreen(state, restEnd - now, note, heartRate, bezel, onAction, onOpenOverview)
     else SetScreen(state, note, bezel, onAction, onOpenOverview)
+}
+
+private fun tick(context: Context) {
+    context.getSystemService(Vibrator::class.java)
+        ?.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
 }
 
 internal fun buzz(context: Context) {
@@ -430,15 +453,29 @@ private fun setTitle(state: WatchState): String {
  */
 @Composable
 private fun ScrollingName(text: String, style: TextStyle, color: Color = Color.White) {
-    Text(
-        text,
-        style = style,
-        color = color,
-        textAlign = TextAlign.Center,
-        maxLines = 1,
-        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1_500, repeatDelayMillis = 2_000, spacing = MarqueeSpacing(24.dp))
-    )
+    // The edges fade out, so a long name runs off softly instead of being cut by the round screen.
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(EdgeFade, blendMode = BlendMode.DstIn)
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text,
+            style = style,
+            color = color,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1_500, repeatDelayMillis = 2_000, spacing = MarqueeSpacing(24.dp))
+        )
+    }
 }
+
+private val EdgeFade = Brush.horizontalGradient(0f to Color.Transparent, 0.1f to Color.Black, 0.9f to Color.Black, 1f to Color.Transparent)
 
 /** The whole workout's progress as a thin ring round the edge, from the top. */
 @Composable
@@ -467,7 +504,8 @@ private fun Stepper(value: String, label: String, selected: Boolean, onSelect: (
                 .clickable(onClickLabel = t("Turn the bezel to change {0}", label), onClick = onSelect),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(value, style = MaterialTheme.typography.title3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Bodyweight sets come as "12 reps": the label under it already says reps.
+            Text(value.removeSuffix(" $label"), style = MaterialTheme.typography.title3, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(label, style = MaterialTheme.typography.caption3, color = Muted)
         }
         CompactButton(onClick = onPlus, colors = ButtonDefaults.buttonColors(backgroundColor = Control, contentColor = Orange)) {
@@ -476,9 +514,12 @@ private fun Stepper(value: String, label: String, selected: Boolean, onSelect: (
     }
 }
 
-/** The bezel adds or takes off 15 s. Undo un-ticks the set that started the rest. */
+/**
+ * The bezel adds or takes off 15 s. Undo un-ticks the set that started the rest. The three
+ * buttons are round so they fit inside the ring on a 40 mm watch (Skip was cut off as a chip).
+ */
 @Composable
-private fun RestScreen(state: WatchState, remainingMillis: Long, note: String?, bezel: Boolean, onAction: (WatchAction) -> Unit, onOpenOverview: () -> Unit) {
+private fun RestScreen(state: WatchState, remainingMillis: Long, note: String?, heartRate: Int?, bezel: Boolean, onAction: (WatchAction) -> Unit, onOpenOverview: () -> Unit) {
     Box(
         Modifier.fillMaxSize().rotarySteps(bezel, "rest") { up -> onAction(if (up) WatchAction.ADD_REST else WatchAction.REMOVE_REST) },
         contentAlignment = Alignment.Center
@@ -492,13 +533,13 @@ private fun RestScreen(state: WatchState, remainingMillis: Long, note: String?, 
                 strokeWidth = 6.dp
             )
         }
-        // The buttons sit low on the round screen where it is still wide; the text needs more margin.
         Column(Modifier.padding(horizontal = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             // The ring and countdown already say "rest"; the line is kept for phone problems.
             note?.let { Text(it, style = MaterialTheme.typography.caption1, color = Muted) }
             Text(clock(remainingMillis), style = MaterialTheme.typography.display2)
+            heartRate?.let { HeartRateLine(it) }
             Column(
-                Modifier.padding(horizontal = 14.dp).clickable(onClickLabel = t("Workout overview"), onClick = onOpenOverview),
+                Modifier.padding(horizontal = 22.dp).clickable(onClickLabel = t("Workout overview"), onClick = onOpenOverview),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val next = state.exerciseName
@@ -511,21 +552,42 @@ private fun RestScreen(state: WatchState, remainingMillis: Long, note: String?, 
                 }
             }
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (state.canUndo) {
-                    CompactButton(
-                        onClick = { onAction(WatchAction.UNDO_SET) },
-                        colors = ButtonDefaults.buttonColors(backgroundColor = Control, contentColor = Color.White)
-                    ) {
+                    RoundButton(onClick = { onAction(WatchAction.UNDO_SET) }) {
                         Icon(painterResource(R.drawable.ic_undo), contentDescription = t("Undo set"), Modifier.size(18.dp))
                     }
                 }
-                // Slightly narrower than standard so three controls fit inside the ring on a 40 mm watch.
-                val padding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                CompactChip(onClick = { onAction(WatchAction.ADD_REST) }, label = { Text(t("+15s")) }, colors = ChipDefaults.secondaryChipColors(), contentPadding = padding)
-                CompactChip(onClick = { onAction(WatchAction.SKIP_REST) }, label = { Text(t("Skip")) }, colors = ChipDefaults.primaryChipColors(), contentPadding = padding)
+                RoundButton(onClick = { onAction(WatchAction.ADD_REST) }, label = t("Add 15 seconds")) {
+                    Text(t("+15"), style = MaterialTheme.typography.caption1.copy(fontWeight = FontWeight.SemiBold))
+                }
+                RoundButton(onClick = { onAction(WatchAction.SKIP_REST) }, primary = true) {
+                    Icon(painterResource(R.drawable.ic_skip), contentDescription = t("Skip rest"), Modifier.size(18.dp))
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun RoundButton(onClick: () -> Unit, primary: Boolean = false, label: String? = null, content: @Composable () -> Unit) {
+    Button(
+        onClick = onClick,
+        colors = if (primary) ButtonDefaults.buttonColors(backgroundColor = Orange, contentColor = Color.Black)
+        else ButtonDefaults.buttonColors(backgroundColor = Control, contentColor = Color.White),
+        modifier = Modifier.size(40.dp).then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
+    ) { content() }
+}
+
+/** The heart rate with a small heart, from the watch's own sensor. */
+@Composable
+private fun HeartRateLine(bpm: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(R.drawable.ic_heart), contentDescription = t("Heart rate"), tint = HeartRed, modifier = Modifier.size(12.dp))
+        Spacer(Modifier.width(4.dp))
+        Text("$bpm", style = MaterialTheme.typography.caption1.copy(fontWeight = FontWeight.SemiBold))
+        Spacer(Modifier.width(3.dp))
+        Text(t("bpm"), style = MaterialTheme.typography.caption3, color = Muted)
     }
 }
 
@@ -550,8 +612,22 @@ private fun AllDone(state: WatchState, note: String?, onAction: (WatchAction) ->
                 modifier = Modifier.fillMaxWidth()
             )
         }
+        state.addSetTo?.let { name -> item { AddSetChip(t("One more set"), name, onAction) } }
         if (state.canUndo) item { UndoChip(onAction) }
     }
+}
+
+/** A copy of the last set of [exercise], done next. */
+@Composable
+private fun AddSetChip(label: String, exercise: String, onAction: (WatchAction) -> Unit) {
+    Chip(
+        onClick = { onAction(WatchAction.ADD_SET) },
+        label = { Text(label) },
+        secondaryLabel = { Text(exercise, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null, Modifier.size(ChipDefaults.IconSize)) },
+        colors = ChipDefaults.secondaryChipColors(),
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -639,6 +715,8 @@ private fun Overview(state: WatchState, now: Long, onAction: (WatchAction) -> Un
                     )
                 }
             }
+            // Mid-workout: one more set of what was just done (or what's on now).
+            if (state.exerciseName != null) state.addSetTo?.let { name -> item { AddSetChip(t("Add a set"), name, onAction) } }
             if (state.canUndo) item { UndoChip(onAction) }
             item { OpenOnPhone(opened) { onOpenOnPhone(); opened = true } }
         }

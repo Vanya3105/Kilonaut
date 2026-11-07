@@ -59,6 +59,7 @@ object WatchSync {
             }
             WatchAction.UNDO_SET -> undoLastSet(context)
             WatchAction.FINISH_WORKOUT -> finishWorkout(context)
+            WatchAction.ADD_SET -> addSet(context)
         }
     }
 
@@ -88,6 +89,28 @@ object WatchSync {
         val sets = ex.sets.toMutableList().also { it[setIdx] = it[setIdx].copy(isCompleted = false) }
         LocalStorage.saveActiveSession(context, splitTitle, exercises.toMutableList().also { it[exIdx] = ex.copy(sets = sets) }, fromWidget = true)
         LocalStorage.setRestEndTimeMillis(context, 0L, fromWidget = true)
+    }
+
+    /**
+     * Where "Add set" goes: the exercise of the set ticked last (one more of what was just done,
+     * also while resting before the next exercise), else the current one, else the last.
+     */
+    internal fun addSetTarget(exercises: List<ExerciseEntry>): Int {
+        val current = exercises.indexOfFirst { ex -> !ex.isSkipped && ex.sets.any { !it.isCompleted } }
+        val searchUpTo = if (current == -1) exercises.lastIndex else current
+        return (searchUpTo downTo 0).firstOrNull { i -> !exercises[i].isSkipped && exercises[i].sets.any { it.isCompleted } }
+            ?: current.takeIf { it >= 0 }
+            ?: exercises.indexOfLast { !it.isSkipped && it.sets.isNotEmpty() }
+    }
+
+    /** A copy of the target's last set, not done and as a work set; it becomes the next set. */
+    internal fun addSet(context: Context) {
+        val (splitTitle, exercises) = LocalStorage.loadActiveSession(context) ?: return
+        val exIdx = addSetTarget(exercises).takeIf { it >= 0 } ?: return
+        val ex = exercises[exIdx]
+        val last = ex.sets.lastOrNull() ?: return
+        val added = last.copy(setNumber = ex.sets.size + 1, isCompleted = false, isWarmup = false, intensityType = "NORMAL")
+        LocalStorage.saveActiveSession(context, splitTitle, exercises.toMutableList().also { it[exIdx] = ex.copy(sets = ex.sets + added) }, fromWidget = true)
     }
 
     /** Saves the workout like Finish → Save on the phone (no photo), timed from its start to now. */
