@@ -44,6 +44,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.SettingsBackupRestore
+import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOff
@@ -127,6 +128,18 @@ fun SettingsScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) {
+            try {
+                val history = LocalStorage.loadHistory(context)
+                val csv = workoutsCsv(history) { LocalStorage.getWorkoutNote(context, it) }
+                context.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray()) }
+                AppSnackbar.show(if (history.size == 1) tr("Exported 1 workout") else tr("Exported {0} workouts", history.size))
+            } catch (_: Exception) {
+                AppSnackbar.show(tr("Couldn't save the file"))
+            }
+        }
     }
     var otherAppFile by remember { mutableStateOf<String?>(null) }
     val otherAppLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -265,12 +278,21 @@ fun SettingsScreen(
         item { HealthConnectGroup(onImported = onDataRestored) }
 
         item {
-            SettingsGroup(tr("Bring in data")) {
+            SettingsGroup(tr("Other apps")) {
                 LinkRow(Icons.Rounded.MoveToInbox, tr("Import from Strong or Hevy")) {
                     otherAppLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
                 }
                 Text(
                     tr("Workouts from their export file are added to your history. A copy of your data is kept first."),
+                    style = AppType.caption,
+                    color = P.textTertiary
+                )
+                Spacer(Modifier.height(4.dp))
+                LinkRow(Icons.Rounded.TableChart, tr("Export workouts as CSV")) {
+                    csvLauncher.launch("kilonaut-workouts-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(Date())}.csv")
+                }
+                Text(
+                    tr("Every set as a spreadsheet row, in the layout Strong uses, so other apps can read it."),
                     style = AppType.caption,
                     color = P.textTertiary
                 )

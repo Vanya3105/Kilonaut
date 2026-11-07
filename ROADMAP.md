@@ -168,6 +168,14 @@ Measured with Perfetto system traces and frame stats on the emulator (release bu
 - [x] Tabs stay composed after their first visit (`TabHost` in `MainActivity.kt`; hidden tabs aren't measured, placed or drawn): switching back no longer rebuilds the screen. Return visits: worst frames 214/201/163 → 70/42/41 ms, total app work 3.2 → 1.8 s; each tab also keeps its scroll position. The incoming tab still fades and slides in
 - The workout cards' data (records, coaching, Previous column) costs ~0.3 ms per card even with 300 workouts, so it wasn't touched. Emulator scroll comparisons swing 2× between runs of the same build (the emulator's GPU), so scroll-only changes need the phone to judge
 
+## App review (branch `app-review`, on top of `widgets-2`; owner: "go over the app, fill the gaps, change what you think is right", 2026-11-07)
+Compared with Strong and Hevy, the essentials Kilonaut lacked, built in this order:
+- [x] Update check (`AppUpdate.kt`): once a day the app asks GitHub for the latest release; Today shows "Kilonaut 3.9.0 is out" with Download (the phone APK), What's new and Not now (remembered per version). Skipped for Play installs. Test: `AppUpdateTest`
+- [x] Workout notes: a note field on the finish sheet (also when editing a past workout), shown on the History card in quotes; kept in the JSON store (`workoutNotes`), so backups carry them. Test in `UndoTest`
+- [x] Warm-up sets on demand: exercise menu → Warm-up sets builds a ramp to the first work set (empty bar ×10 for bar lifts, then ~50% ×5, 70% ×3, 85% ×1), rounded down to the weight step; unticked warm-ups are replaced. Test: `WarmupTest`
+- [x] Consistency on Progress (`Consistency.kt`): weeks-in-a-row streak (this week counts once it has a workout, so Monday doesn't break it), an 18-week calendar of training days, this month / all time. Test: `ConsistencyTest`
+- [x] CSV export (Profile → Other apps): every set in Strong's export layout (kg, meters, W/D set orders, workout notes), which Kilonaut's own import reads back. Test: `CsvExportTest`
+
 ## Widgets 2 (branch `widgets-2`, owner's request 2026-11-07: "nice and cool on any wallpaper, dark or light", settings screen professional)
 - [x] Light and dark built into every widget: the workout widget's colours are day/night pairs (`setColorInt`, Android 12+), the drawn widgets carry a light and a dark picture (`gym_canvas_widget_daynight`, picked by values / values-night), so Auto switches with the phone without the app running. Was: picked once when drawn, stayed light all evening
 - [x] New colour choice "Wallpaper" (Material You, Android 12+)
