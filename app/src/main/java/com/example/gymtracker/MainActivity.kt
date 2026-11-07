@@ -83,6 +83,9 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(AppLanguage.wrap(newBase))
     }
 
+    /** Dark icons on the bars, for a light palette; set from Compose. */
+    var lightBars = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         // The app is ready almost at once, which would cut the logo animation off after a few
@@ -99,13 +102,25 @@ class MainActivity : ComponentActivity() {
             runCatching { provider.iconView }.getOrNull()
                 ?.animate()?.scaleX(1.35f)?.scaleY(1.35f)?.setDuration(SPLASH_EXIT_MS)?.setInterpolator(easing)?.start()
             provider.view.animate().alpha(0f).setDuration(SPLASH_EXIT_MS).setInterpolator(easing)
-                .withEndAction { provider.remove() }.start()
+                .withEndAction {
+                    provider.remove()
+                    // Removing the splash puts the bars back to the theme's light icons; on a light
+                    // page that left the clock white on white.
+                    applySystemBarAppearance(this, lightBars)
+                }.start()
         }
         super.onCreate(savedInstanceState)
         // Exercise photos were downloaded here before the drawn figures replaced them (2026-10-31).
         Thread { java.io.File(noBackupFilesDir, "exercise_photos").deleteRecursively() }.start()
         enableEdgeToEdge()
         setContent { GymTrackerRoot(activity = this) }
+    }
+}
+
+private fun applySystemBarAppearance(activity: Activity, light: Boolean) {
+    WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+        isAppearanceLightStatusBars = light
+        isAppearanceLightNavigationBars = light
     }
 }
 
@@ -128,10 +143,8 @@ fun GymTrackerRoot(activity: Activity) {
 
     LaunchedEffect(settings.targetFps) { applyDisplayRefreshRate(activity, settings.targetFps) }
     SideEffect {
-        WindowCompat.getInsetsController(activity.window, view).apply {
-            isAppearanceLightStatusBars = !palette.isDark
-            isAppearanceLightNavigationBars = !palette.isDark
-        }
+        (activity as? MainActivity)?.lightBars = !palette.isDark
+        applySystemBarAppearance(activity, !palette.isDark)
     }
 
     val haptics = remember(settings.hapticsEnabled, view) {
@@ -743,12 +756,13 @@ fun GymTrackerApp(
             }
         }
 
+        val end = endSign()
         var shownProgramId by remember { mutableStateOf(editingProgramId) }
         if (editingProgramId != null) shownProgramId = editingProgramId
         AnimatedVisibility(
             visible = editingProgramId != null,
-            enter = slideInHorizontallyBy(1f) + fadeIn(tween(150)),
-            exit = fadeOut(tween(180))
+            enter = pageEnter(end),
+            exit = pageExit(end)
         ) {
             shownProgramId?.let { id ->
                 ProgramEditorScreen(
@@ -778,8 +792,8 @@ fun GymTrackerApp(
         if (openExercise != null) shownExercise = openExercise
         AnimatedVisibility(
             visible = openExercise != null,
-            enter = slideInHorizontallyBy(1f) + fadeIn(tween(150)),
-            exit = fadeOut(tween(180))
+            enter = pageEnter(end),
+            exit = pageExit(end)
         ) {
             shownExercise?.let { name ->
                 ExerciseDetailScreen(
@@ -890,8 +904,8 @@ fun GymTrackerApp(
         if (buildingSplit != null) shownBuilderName = buildingSplit
         AnimatedVisibility(
             visible = buildingSplit != null,
-            enter = slideInHorizontallyBy(1f) + fadeIn(tween(150)),
-            exit = fadeOut(tween(180))
+            enter = pageEnter(end),
+            exit = pageExit(end)
         ) {
             shownBuilderName?.let { name ->
                 SplitBuilderScreen(
@@ -1140,10 +1154,15 @@ private fun newExerciseEntryDefault(
     )
 }
 
-private fun slideInHorizontallyBy(fraction: Float) =
-    androidx.compose.animation.slideInHorizontally(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)) {
-        (it * fraction).toInt()
-    }
+/** A page over the tabs comes in from the end side (the right; the left in Hebrew), [end] from [endSign]. */
+private fun pageEnter(end: Int) =
+    androidx.compose.animation.slideInHorizontally(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)) { it * end } +
+        fadeIn(tween(150))
+
+/** And goes back out that way: a short slide while it fades, so a back press doesn't just blink it away. */
+private fun pageExit(end: Int) =
+    androidx.compose.animation.slideOutHorizontally(tween(220, easing = FastOutLinearInEasing)) { it / 4 * end } +
+        fadeOut(tween(200))
 
 /**
  * One pill slides (with a little overshoot) to the selected tab; the selected icon fills in

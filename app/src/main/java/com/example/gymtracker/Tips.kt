@@ -232,10 +232,11 @@ fun TipTourOverlay(tour: TipTour, onShowStep: (String) -> Unit = {}) {
                 elevated = true,
                 contentPadding = PaddingValues(20.dp)
             ) {
+                val end = endSign()
                 AnimatedContent(
                     targetState = tour.index,
                     transitionSpec = {
-                        val dir = if (targetState > initialState) 1 else -1
+                        val dir = (if (targetState > initialState) 1 else -1) * end
                         (slideInHorizontally(tween(260)) { it / 6 * dir } + fadeIn(tween(220, delayMillis = 60)))
                             .togetherWith(slideOutHorizontally(tween(200)) { -it / 6 * dir } + fadeOut(tween(140)))
                     },

@@ -90,6 +90,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Density
@@ -823,7 +825,8 @@ fun TrendChart(points: List<Pair<String, Float>>, modifier: Modifier = Modifier,
 // ============================================================================
 
 /**
- * Horizontal swipe to page (weeks, months): right goes back, left goes forward when [canGoNext].
+ * Horizontal swipe to page (weeks, months): towards the end goes back, towards the start goes forward
+ * when [canGoNext] (right and left in English, mirrored in Hebrew, like the arrows).
  * Vertical scrolling inside still works; only a clear sideways swipe counts.
  */
 fun Modifier.swipeToPage(onPrevious: () -> Unit, onNext: () -> Unit, canGoNext: Boolean = true): Modifier = composed {
@@ -831,7 +834,8 @@ fun Modifier.swipeToPage(onPrevious: () -> Unit, onNext: () -> Unit, canGoNext: 
     val prev by rememberUpdatedState(onPrevious)
     val next by rememberUpdatedState(onNext)
     val allowNext by rememberUpdatedState(canGoNext)
-    pointerInput(Unit) {
+    val sign = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
+    pointerInput(sign) {
         var total = 0f
         detectHorizontalDragGestures(
             onDragStart = { total = 0f },
@@ -841,14 +845,17 @@ fun Modifier.swipeToPage(onPrevious: () -> Unit, onNext: () -> Unit, canGoNext: 
             }
         ) { change, amount ->
             change.consume()
-            total += amount
+            total += amount * sign
         }
     }
 }
 
-/** Slide direction for paged content: newer pages come in from the right. */
-fun <S : Comparable<S>> AnimatedContentTransitionScope<S>.pageTransition(): ContentTransform {
-    val forward = targetState > initialState
+/**
+ * Slide direction for paged content: newer pages come in from the end side (the right in English,
+ * the left in Hebrew). [rtl] from [isRtl], since the transition itself can't read the layout direction.
+ */
+fun <S : Comparable<S>> AnimatedContentTransitionScope<S>.pageTransition(rtl: Boolean = false): ContentTransform {
+    val forward = (targetState > initialState) != rtl
     val spec = spring<IntOffset>(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)
     return (slideInHorizontally(spec) { if (forward) it / 3 else -it / 3 } + fadeIn(tween(220)))
         .togetherWith(slideOutHorizontally(spec) { if (forward) -it / 3 else it / 3 } + fadeOut(tween(150)))
@@ -916,6 +923,13 @@ private class SheetScrollGuard : NestedScrollConnection {
 }
 
 /** The phone's text size is set large (about 140% or more): rows with a value at the end stack it under the name instead. */
+@Composable
+fun isRtl(): Boolean = LocalLayoutDirection.current == LayoutDirection.Rtl
+
+/** 1 or -1: multiplies a sideways slide so "towards the end" follows the reading direction. */
+@Composable
+fun endSign(): Int = if (isRtl()) -1 else 1
+
 @Composable
 fun isLargeText(): Boolean = LocalDensity.current.fontScale >= 1.4f
 

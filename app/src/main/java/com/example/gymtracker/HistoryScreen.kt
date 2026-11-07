@@ -126,6 +126,7 @@ private fun WeekView(
     onViewPhoto: (String) -> Unit
 ) {
     val P = LocalPalette.current
+    val rtl = isRtl()
     var weekOffset by rememberSaveable { mutableIntStateOf(0) }
     val program = programFor(userProfile.splitProgram)
     val week = remember(history, weekOffset, program) { computeWeekSummary(history, weekOffset, userProfile.splitProgram) }
@@ -134,7 +135,7 @@ private fun WeekView(
     Column(Modifier.fillMaxSize().swipeToPage({ weekOffset-- }, { weekOffset++ }, canGoNext = weekOffset < 0)) {
         Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             CircleIconButton(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, tr("Previous week"), { weekOffset-- })
-            AnimatedContent(weekOffset, transitionSpec = { pageTransition() }, modifier = Modifier.weight(1f), label = "week_title") { offset ->
+            AnimatedContent(weekOffset, transitionSpec = { pageTransition(rtl) }, modifier = Modifier.weight(1f), label = "week_title") { offset ->
                 // The title sliding out keeps its own week's name.
                 val shownWeek = if (offset == weekOffset) week else remember(offset, history) { computeWeekSummary(history, offset, userProfile.splitProgram) }
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -155,7 +156,7 @@ private fun WeekView(
                 else StatTile("${week.workouts.sumOf { totalWorkReps(it.exercises) }}", tr("Reps"), Modifier.weight(1f))
             }
         }
-        AnimatedContent(weekOffset, transitionSpec = { pageTransition() }, modifier = Modifier.weight(1f), label = "week_list") { offset ->
+        AnimatedContent(weekOffset, transitionSpec = { pageTransition(rtl) }, modifier = Modifier.weight(1f), label = "week_list") { offset ->
             val workouts = remember(history, offset, program) { computeWeekSummary(history, offset, userProfile.splitProgram).workouts }
             LazyColumn(
                 Modifier.fillMaxSize(),
@@ -184,6 +185,7 @@ private fun MonthView(
     val today = remember { Calendar.getInstance() }
     var year by rememberSaveable { mutableIntStateOf(today.get(Calendar.YEAR)) }
     var month by rememberSaveable { mutableIntStateOf(today.get(Calendar.MONTH)) }
+    val rtl = isRtl()
     val todayKey = remember { DateUtils.formatDayKey(Date()) }
     var selectedKey by rememberSaveable { mutableStateOf(todayKey) }
     val byDate = remember(history) { history.groupBy { it.dateKey } }
@@ -193,7 +195,7 @@ private fun MonthView(
 
     AnimatedContent(
         year * 12 + month,
-        transitionSpec = { pageTransition() },
+        transitionSpec = { pageTransition(rtl) },
         modifier = Modifier.swipeToPage(::previousMonth, ::nextMonth),
         label = "month_page"
     ) { page ->

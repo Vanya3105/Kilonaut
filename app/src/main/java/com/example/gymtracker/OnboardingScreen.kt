@@ -116,10 +116,11 @@ fun OnboardingScreen(
             Spacer(Modifier.size(40.dp))
         }
 
+        val end = endSign()
         AnimatedContent(
             targetState = step,
             transitionSpec = {
-                val dir = if (targetState > initialState) 1 else -1
+                val dir = (if (targetState > initialState) 1 else -1) * end
                 (slideInHorizontally(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)) { it / 4 * dir } + fadeIn(tween(200)))
                     .togetherWith(slideOutHorizontally(tween(200)) { -it / 4 * dir } + fadeOut(tween(150)))
             },
