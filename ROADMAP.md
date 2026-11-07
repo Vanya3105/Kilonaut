@@ -9,11 +9,20 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**Smarter coaching from effort** (branch `smart-effort`, on top of `one-calendar`, not tested on the phone yet): "reps left" now drives the weight advice (`planFromEffort`, `inSession`). Next time: top of the range with 2+ to spare → up to the weight for the range's middle with 2 left (nearest plate, at most ~10%); top only by going to failure → one step; mid-range with 3+ left on every set → up anyway. During a workout: a set with 3+ left raises the rest; set 1 to failure → hold, with a lighter option. Science in the comment above WEIGHT SUGGESTIONS (Helms 2018, Graham & Cleather 2020, Robinson 2024, Halperin 2021). Without ratings nothing changes; history and records stay rep-based.
+**NEXT SESSION: accounts + cloud database (owner, 2026-11-08). Do this before publishing anything (no beta release until it's done).** People create an account and their data is saved in a free online database, so it follows them to a new phone and isn't only on the device. Start by agreeing the approach with the owner:
+- Options to compare: Firebase (Auth + Firestore; the app already has Firebase Crashlytics and Google sign-in, free Spark tier) vs Supabase (Postgres + Auth, free tier). Check current free-tier limits online first.
+- Sign-in: Google (already used for Drive backups) and probably email; the app must keep working fully offline and without an account.
+- Data: what syncs (workouts, weigh-ins, programs/days, settings, notes, photos?), merging when the same account is on two phones, first sign-in on a phone that already has data, deleting the account and its data (Play requires it), privacy policy update.
+- Keep Drive backup working (or replace it with the account) and decide with the owner.
+- The google-services.json / Firebase project setup is the owner's part.
 
-**One calendar** (branch `one-calendar`, on top of `pro-pass`, not tested on the phone yet): the training-days grid (now 26 weeks, `TrainingDaysCard`) moved from Progress to the top of History; tapping a day opens it in History's month calendar, which rings it on the grid. Progress keeps the streak and counts (`ConsistencyCard`), and a tap opens History.
+**After accounts:** publish 1.0.0 beta 1 (GitHub pre-release, phone + watch APKs). Later coaching ideas the owner liked: learn exercise preferences from swaps/skips, adapt weekly volume every few weeks, planned deloads, occasional AMRAP check to calibrate reps-left.
 
-**Professional pass** (branch `pro-pass`, not tested on the phone yet), after the owner worried the app feels childish:
+**Smarter coaching from effort** (branch `smart-effort`) merged (2026-11-08): "reps left" now drives the weight advice (`planFromEffort`, `inSession`). Next time: top of the range with 2+ to spare → up to the weight for the range's middle with 2 left (nearest plate, at most ~10%); top only by going to failure → one step; mid-range with 3+ left on every set → up anyway. During a workout: a set with 3+ left raises the rest; set 1 to failure → hold, with a lighter option. Science in the comment above WEIGHT SUGGESTIONS (Helms 2018, Graham & Cleather 2020, Robinson 2024, Halperin 2021). Without ratings nothing changes; history and records stay rep-based.
+
+**One calendar** (branch `one-calendar`) merged (2026-11-08): the training-days grid (now 26 weeks, `TrainingDaysCard`) moved from Progress to the top of History; tapping a day opens it in History's month calendar, which rings it on the grid. Progress keeps the streak and counts (`ConsistencyCard`), and a tap opens History.
+
+**Professional pass** (branch `pro-pass`) merged (2026-11-08), after the owner worried the app feels childish:
 - [x] Motion settles instead of wobbling: no spring below 0.75 damping (tab icons, set tick pop 1.18 → 1.08, badges, picker check, nav pill, press feedback, consistency calendar).
 - [x] Confetti only for milestones (`isMilestone`: 1st, 10th, 25th, 50th, 100th workout, then every 100th), none in the workout's finish sheet. No exclamation marks: "Workout complete", "New personal best".
 - [x] One selection style (inverted, like the chips; reminder days were orange); one orange button per screen (Health Connect's Connect is secondary).
