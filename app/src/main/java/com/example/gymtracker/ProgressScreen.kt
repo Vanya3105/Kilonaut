@@ -79,6 +79,8 @@ fun ProgressScreen(
             )
         }
 
+        item { ConsistencyCard(history, Modifier.enterAnimation(0)) }
+
         item {
             SectionHeader(
                 tr("Best lifts"),
