@@ -98,6 +98,8 @@ fun HomeScreen(
                 }
             }
 
+            item { UpdateCard() }
+
             item {
                 UpNextCard(
                     split = upNext,

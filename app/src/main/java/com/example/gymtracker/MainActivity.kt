@@ -120,6 +120,7 @@ fun GymTrackerRoot(activity: Activity) {
     LaunchedEffect(Unit) {
         removeOldAlertChannels(context)
         CrashReports.apply(context)
+        AppUpdate.check(context)
     }
 
     var settings by remember { mutableStateOf(LocalStorage.loadSettings(context)) }
