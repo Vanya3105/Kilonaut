@@ -327,6 +327,9 @@ fun GymTrackerApp(
     // The live workout is either open full-screen or minimized to the "Resume" bar.
     var workoutExpanded by rememberSaveable { mutableStateOf(initialActive != null) }
 
+    // Which live workout is open: its start time, new for every workout.
+    val liveSessionKey = if (activeSplit != null) LocalStorage.activeSessionStartedAt(context) ?: 0L else 0L
+
     val reloadFromDisk = rememberUpdatedState {
         val latest = LocalStorage.loadActiveSession(context)
         if (latest != null && editingPastWorkout == null) {
@@ -718,85 +721,89 @@ fun GymTrackerApp(
                             }
                         )
                     } else {
-                        ActiveWorkoutScreen(
-                            split = split,
-                            exercises = currentExercises,
-                            history = history,
-                            settings = settings,
-                            userProfile = userProfile,
-                            isEditingPastWorkout = false,
-                            initialPhotoPath = null,
-                            haptics = haptics,
-                            infoVersion = exerciseInfoVersion,
-                            onOpenExercise = { openExercise = it },
-                            onChangeExerciseType = ::changeExerciseType,
-                            onUpdateExercises = { updated ->
-                                currentExercises = updated
-                                LocalStorage.saveActiveSession(context, split.title, updated)
-                            },
-                            onReorderExercises = { from, to ->
-                                val reordered = currentExercises.moved(from, to)
-                                currentExercises = reordered
-                                LocalStorage.saveActiveSession(context, split.title, reordered)
-                                if (split.title != QUICK_WORKOUT_TITLE) {
-                                    LocalStorage.saveTemplateForSplit(context, split.title, reordered.map { it.name to it.targetMuscle })
-                                }
-                            },
-                            onAddExercise = { name, muscle ->
-                                if (split.title != QUICK_WORKOUT_TITLE) LocalStorage.addExerciseToSplitTemplate(context, split.title, name, muscle)
-                            },
-                            onRemoveExercisePermanently = { exName ->
-                                val day = if (split.title != QUICK_WORKOUT_TITLE) LocalStorage.daySnapshot(context, split.title) else null
-                                if (day != null) LocalStorage.removeExerciseFromSplitTemplate(context, split.title, exName)
-                                val before = currentExercises
-                                val updated = before.filterNot { it.name.equals(exName, ignoreCase = true) }
-                                currentExercises = updated
-                                LocalStorage.saveActiveSession(context, split.title, updated)
-                                // Says where it's gone from, which the old confirmation explained.
-                                val text = if (day != null) tr("{0} removed from {1}", shown(exName), shown(split.title)) else tr("{0} removed", shown(exName))
-                                AppSnackbar.show(text, tr("Undo")) {
-                                    if (day != null) LocalStorage.restoreDay(context, day)
-                                    if (activeSplit?.title == split.title && editingPastWorkout == null) {
-                                        currentExercises = withReturned(currentExercises, before, exName)
-                                        LocalStorage.saveActiveSession(context, split.title, currentExercises)
+                        // One screen per workout: a workout started while another's screen was up (the
+                        // icon shortcut, switching days) got the old one's clock and leftovers.
+                        key(liveSessionKey) {
+                            ActiveWorkoutScreen(
+                                split = split,
+                                exercises = currentExercises,
+                                history = history,
+                                settings = settings,
+                                userProfile = userProfile,
+                                isEditingPastWorkout = false,
+                                initialPhotoPath = null,
+                                haptics = haptics,
+                                infoVersion = exerciseInfoVersion,
+                                onOpenExercise = { openExercise = it },
+                                onChangeExerciseType = ::changeExerciseType,
+                                onUpdateExercises = { updated ->
+                                    currentExercises = updated
+                                    LocalStorage.saveActiveSession(context, split.title, updated)
+                                },
+                                onReorderExercises = { from, to ->
+                                    val reordered = currentExercises.moved(from, to)
+                                    currentExercises = reordered
+                                    LocalStorage.saveActiveSession(context, split.title, reordered)
+                                    if (split.title != QUICK_WORKOUT_TITLE) {
+                                        LocalStorage.saveTemplateForSplit(context, split.title, reordered.map { it.name to it.targetMuscle })
                                     }
+                                },
+                                onAddExercise = { name, muscle ->
+                                    if (split.title != QUICK_WORKOUT_TITLE) LocalStorage.addExerciseToSplitTemplate(context, split.title, name, muscle)
+                                },
+                                onRemoveExercisePermanently = { exName ->
+                                    val day = if (split.title != QUICK_WORKOUT_TITLE) LocalStorage.daySnapshot(context, split.title) else null
+                                    if (day != null) LocalStorage.removeExerciseFromSplitTemplate(context, split.title, exName)
+                                    val before = currentExercises
+                                    val updated = before.filterNot { it.name.equals(exName, ignoreCase = true) }
+                                    currentExercises = updated
+                                    LocalStorage.saveActiveSession(context, split.title, updated)
+                                    // Says where it's gone from, which the old confirmation explained.
+                                    val text = if (day != null) tr("{0} removed from {1}", shown(exName), shown(split.title)) else tr("{0} removed", shown(exName))
+                                    AppSnackbar.show(text, tr("Undo")) {
+                                        if (day != null) LocalStorage.restoreDay(context, day)
+                                        if (activeSplit?.title == split.title && editingPastWorkout == null) {
+                                            currentExercises = withReturned(currentExercises, before, exName)
+                                            LocalStorage.saveActiveSession(context, split.title, currentExercises)
+                                        }
+                                    }
+                                },
+                                onMinimize = { workoutExpanded = false },
+                                onDiscardWorkout = {
+                                    haptics.tick()
+                                    discardActiveWorkout()
+                                },
+                                onFinishWorkout = { durationSecs, photoPath, skipped, note ->
+                                    haptics.confirm()
+                                    val now = Date()
+                                    LocalStorage.setWorkoutNote(context, now.time, note)
+                                    val completed = buildCompletedWorkout(
+                                        CompletedWorkout(
+                                            id = now.time,
+                                            splitTitle = split.title,
+                                            dateKey = DateUtils.formatDayKey(now),
+                                            displayDate = DateUtils.formatDisplayDate(now),
+                                            durationSeconds = durationSecs,
+                                            bodyWeightKg = userProfile.currentWeightKg,
+                                            photoPath = photoPath,
+                                            skippedExercises = skipped,
+                                            exercises = emptyList()
+                                        ),
+                                        currentExercises,
+                                        history
+                                    )
+                                    // What the workout meant, judged against the workouts before it.
+                                    celebration = buildShareData(split.title, durationSecs, currentExercises, history, now.time, photoPath)
+                                    WorkoutChime.play(context)
+                                    LocalStorage.saveCompletedWorkout(context, completed)
+                                    history = LocalStorage.loadHistory(context)
+                                    workoutExpanded = false
+                                    activeSplit = null
+                                    currentExercises = emptyList()
+                                    selectedTab = AppTab.TODAY
                                 }
-                            },
-                            onMinimize = { workoutExpanded = false },
-                            onDiscardWorkout = {
-                                haptics.tick()
-                                discardActiveWorkout()
-                            },
-                            onFinishWorkout = { durationSecs, photoPath, skipped, note ->
-                                haptics.confirm()
-                                val now = Date()
-                                LocalStorage.setWorkoutNote(context, now.time, note)
-                                val completed = buildCompletedWorkout(
-                                    CompletedWorkout(
-                                        id = now.time,
-                                        splitTitle = split.title,
-                                        dateKey = DateUtils.formatDayKey(now),
-                                        displayDate = DateUtils.formatDisplayDate(now),
-                                        durationSeconds = durationSecs,
-                                        bodyWeightKg = userProfile.currentWeightKg,
-                                        photoPath = photoPath,
-                                        skippedExercises = skipped,
-                                        exercises = emptyList()
-                                    ),
-                                    currentExercises,
-                                    history
-                                )
-                                // What the workout meant, judged against the workouts before it.
-                                celebration = buildShareData(split.title, durationSecs, currentExercises, history, now.time, photoPath)
-                                WorkoutChime.play(context)
-                                LocalStorage.saveCompletedWorkout(context, completed)
-                                history = LocalStorage.loadHistory(context)
-                                workoutExpanded = false
-                                activeSplit = null
-                                currentExercises = emptyList()
-                                selectedTab = AppTab.TODAY
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -1440,7 +1447,9 @@ private fun withReturned(now: List<ExerciseEntry>, before: List<ExerciseEntry>, 
     return now.toMutableList().apply { add(after + 1, before[idx]) }
 }
 
-private fun workoutTitle(title: String) = if (title == QUICK_WORKOUT_TITLE) tr("Empty workout") else shown(title)
+// "Empty workout" is the button that starts one; the workout itself is "Quick workout" everywhere
+// it's shown (its header, Today, History), so the questions about it say that too.
+private fun workoutTitle(title: String) = shown(title)
 
 /**
  * Starting another workout while one runs: save this one (when a set is ticked) or throw it away

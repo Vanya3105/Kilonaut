@@ -896,6 +896,10 @@ object LocalStorage {
         if (splitTitle == null) RestAlarmScheduler.scheduleOrCancel(context.applicationContext, 0L)
     }
 
+    /** The running workout's start, or null with none (unlike [getActiveSessionStartTime], never "now"). */
+    fun activeSessionStartedAt(context: Context): Long? =
+        root(context).optJSONObject("activeSession")?.optLong("startTimeMillis", 0L)?.takeIf { it > 0L }
+
     fun getActiveSessionStartTime(context: Context): Long =
         root(context).optJSONObject("activeSession")?.optLong("startTimeMillis", 0L)?.takeIf { it > 0L }
             ?: System.currentTimeMillis()
