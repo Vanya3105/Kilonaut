@@ -4,11 +4,6 @@ import android.os.Build
 import android.content.pm.PackageManager
 import android.Manifest
 import androidx.core.content.ContextCompat
-import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.material3.TimePicker
-import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.TimePickerDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import java.util.Calendar
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -432,7 +427,6 @@ internal fun defaultReminderDays(perWeek: Int): Set<Int> = when (perWeek) {
     else -> setOf(Calendar.MONDAY, Calendar.WEDNESDAY, Calendar.FRIDAY)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings: (AppSettings) -> Unit) {
     val P = LocalPalette.current
@@ -441,18 +435,24 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
     // Which time is being picked: the workout reminder's or the weigh-in's.
     var picking by remember { mutableStateOf<ReminderKind?>(null) }
     val is24 = android.text.format.DateFormat.is24HourFormat(context)
-    fun clock(minutes: Int): String {
-        val cal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, minutes / 60); set(Calendar.MINUTE, minutes % 60) }
-        return java.text.SimpleDateFormat(if (is24) "HH:mm" else "h:mm a", java.util.Locale.getDefault()).format(cal.time)
+    val time = clockText(settings.reminderMinutes, is24)
+    val weighTime = clockText(settings.weighReminderMinutes, is24)
+    // Exact alarms: asked once, in the app's own words, the first time a reminder is turned on.
+    var askExact by remember { mutableStateOf(false) }
+    fun askExactOnce() {
+        if (WorkoutReminders.mayBeLate(context) && !WorkoutReminders.askedExact(context)) {
+            WorkoutReminders.markAskedExact(context)
+            askExact = true
+        }
     }
-    val time = clock(settings.reminderMinutes)
-    val weighTime = clock(settings.weighReminderMinutes)
-    // Reminders are notifications: on Android 13+ they need the permission, asked when turned on.
-    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    // Reminders are notifications: on Android 13+ they need the permission, asked when turned on;
+    // the alarm question follows, so the two don't open on top of each other.
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { askExactOnce() }
     fun askIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else askExactOnce()
     }
     SettingsGroup(tr("Reminders")) {
         ToggleRow(
@@ -511,41 +511,40 @@ private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings
         }
     }
     picking?.let { kind ->
-        val minutes = if (kind == ReminderKind.WORKOUT) settings.reminderMinutes else settings.weighReminderMinutes
-        val state = rememberTimePickerState(minutes / 60, minutes % 60, is24)
+        TimeDialSheet(
+            title = if (kind == ReminderKind.WORKOUT) tr("Workout reminder") else tr("Morning weigh-in"),
+            initialMinutes = if (kind == ReminderKind.WORKOUT) settings.reminderMinutes else settings.weighReminderMinutes,
+            is24 = is24,
+            hapticsOn = settings.hapticsEnabled,
+            onDismiss = { picking = null },
+            onSave = { picked ->
+                picking = null
+                onUpdateSettings(if (kind == ReminderKind.WORKOUT) settings.copy(reminderMinutes = picked) else settings.copy(weighReminderMinutes = picked))
+            }
+        )
+    }
+    if (askExact) {
         AlertDialog(
-            onDismissRequest = { picking = null },
+            onDismissRequest = { askExact = false },
             containerColor = P.bgElevated,
+            title = { Text(tr("Remind you right on time?"), style = AppType.title, color = P.textPrimary) },
+            text = {
+                Text(
+                    tr("Without it, Android may hold a reminder back by up to an hour. Allow Kilonaut to set alarms and they come at the minute you picked."),
+                    style = AppType.body, color = P.textSecondary
+                )
+            },
             confirmButton = {
                 TextButton({
-                    picking = null
-                    val picked = state.hour * 60 + state.minute
-                    onUpdateSettings(if (kind == ReminderKind.WORKOUT) settings.copy(reminderMinutes = picked) else settings.copy(weighReminderMinutes = picked))
-                }) { Text(tr("Done"), color = P.accentPrimary) }
+                    askExact = false
+                    runCatching {
+                        context.startActivity(
+                            Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:" + context.packageName))
+                        )
+                    }
+                }) { Text(tr("Allow"), color = P.accentPrimary) }
             },
-            dismissButton = { TextButton({ picking = null }) { Text(tr("Cancel"), color = P.textSecondary) } },
-            // The app's orange and greys, not Material's default purple and pink.
-            text = {
-                TimePicker(
-                    state,
-                    colors = TimePickerDefaults.colors(
-                        clockDialColor = P.bgControl,
-                        clockDialSelectedContentColor = P.onAccentPrimary,
-                        clockDialUnselectedContentColor = P.textPrimary,
-                        selectorColor = P.accentPrimary,
-                        containerColor = P.bgElevated,
-                        periodSelectorBorderColor = P.borderStrong,
-                        periodSelectorSelectedContainerColor = P.accentSoft,
-                        periodSelectorUnselectedContainerColor = Color.Transparent,
-                        periodSelectorSelectedContentColor = P.accentPrimary,
-                        periodSelectorUnselectedContentColor = P.textSecondary,
-                        timeSelectorSelectedContainerColor = P.accentSoft,
-                        timeSelectorUnselectedContainerColor = P.bgControl,
-                        timeSelectorSelectedContentColor = P.accentPrimary,
-                        timeSelectorUnselectedContentColor = P.textPrimary
-                    )
-                )
-            }
+            dismissButton = { TextButton({ askExact = false }) { Text(tr("Not now"), color = P.textSecondary) } }
         )
     }
 }

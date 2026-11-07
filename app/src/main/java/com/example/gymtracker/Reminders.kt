@@ -65,6 +65,15 @@ object WorkoutReminders {
         )
     }
 
+    /** Without exact alarms Android may run a reminder up to an hour late. */
+    fun mayBeLate(context: Context): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            context.getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() == false
+
+    private fun prefs(context: Context) = context.getSharedPreferences("gym_tracker_reminders", Context.MODE_PRIVATE)
+    fun askedExact(context: Context) = prefs(context).getBoolean("asked_exact", false)
+    fun markAskedExact(context: Context) = prefs(context).edit().putBoolean("asked_exact", true).apply()
+
     private fun set(alarms: AlarmManager, pending: PendingIntent, at: Long?) {
         alarms.cancel(pending)
         if (at == null) return

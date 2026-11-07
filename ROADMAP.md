@@ -9,7 +9,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**Weigh-in reminder** (branch `weigh-reminder`, on top of master, not tested on the phone yet): Profile → Reminders → Morning weigh-in, with its own time (default 7:30). Every day, not once that day's weigh-in is in; Log opens the weigh-in sheet. The reminders' time picker uses the app's colours.
+**Weigh-in reminder** (branch `weigh-reminder`, on top of master, not tested on the phone yet): Profile → Reminders → Morning weigh-in, with its own time (default 7:30). Every day, not once that day's weigh-in is in; Log opens the weigh-in sheet. Times are picked on a day dial (`TimeDial.kt`): a 24-hour ring coloured night→dawn→noon→dusk, drag the sun/moon, ticks every quarter hour, −5/+5. Turning a reminder on asks once, in the app's own popup, to allow exact alarms (opens Alarms & reminders); granting reschedules them on time.
 
 **Polish 4** (branch `polish-4`) is tested on the owner's phone and merged (2026-11-07):
 - [x] Body-weight chart: one weigh-in per day (several on a day made a vertical spike); weigh-ins list shows the time. History month: days to come recede.
