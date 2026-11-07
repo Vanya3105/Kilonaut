@@ -419,6 +419,7 @@ object LocalStorage {
             restTimerSeconds = obj.optInt("restTimerSeconds", 90),
             keepScreenAwake = obj.optBoolean("keepScreenAwake", true),
             restSoundEnabled = obj.optBoolean("restSoundEnabled", true),
+            trackEffort = obj.optBoolean("trackEffort", false),
             reminderDays = obj.optJSONArray("reminderDays")?.let { a -> (0 until a.length()).map { a.optInt(it) }.filter { it in 1..7 }.toSet() }.orEmpty(),
             reminderMinutes = obj.optInt("reminderMinutes", 18 * 60).coerceIn(0, 24 * 60 - 1),
             weighReminderOn = obj.optBoolean("weighReminderOn", false),
@@ -435,6 +436,7 @@ object LocalStorage {
             put("restTimerSeconds", settings.restTimerSeconds)
             put("keepScreenAwake", settings.keepScreenAwake)
             put("restSoundEnabled", settings.restSoundEnabled)
+            put("trackEffort", settings.trackEffort)
             put("reminderDays", org.json.JSONArray(settings.reminderDays.sorted()))
             put("reminderMinutes", settings.reminderMinutes)
             put("weighReminderOn", settings.weighReminderOn)
@@ -1053,6 +1055,7 @@ internal object StoreCodec {
                             put("restSeconds", s.restSeconds)
                             if (s.seconds.isNotEmpty()) put("seconds", s.seconds)
                             if (s.distanceM.isNotEmpty()) put("distanceM", s.distanceM)
+                            if (s.rir >= 0) put("rir", s.rir)
                         })
                     }
                 })
@@ -1080,7 +1083,8 @@ internal object StoreCodec {
                     isCompleted = sObj.optBoolean("isCompleted", false),
                     restSeconds = sObj.optInt("restSeconds", exRest),
                     seconds = sObj.optString("seconds", ""),
-                    distanceM = sObj.optString("distanceM", "")
+                    distanceM = sObj.optString("distanceM", ""),
+                    rir = sObj.optInt("rir", -1).coerceIn(-1, 4)
                 )
             }
             ExerciseEntry(

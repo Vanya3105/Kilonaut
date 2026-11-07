@@ -79,6 +79,13 @@ object Units {
     }
 }
 
+/** "2 left", "4+ left", "to failure": a set's reps in reserve. */
+fun effortText(rir: Int): String = when {
+    rir <= 0 -> tr("to failure")
+    rir >= 4 -> tr("4+ left")
+    else -> tr("{0} left", rir)
+}
+
 /** "62.5 kg" / "135 lb". */
 fun formatWeightKg(kg: Float): String = "${Units.current.number(kg)} ${Units.current.label}"
 

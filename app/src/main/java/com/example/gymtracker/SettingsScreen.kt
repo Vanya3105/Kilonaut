@@ -25,6 +25,8 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.FitnessCenter
@@ -264,6 +266,9 @@ fun SettingsScreen(
                     tr("A short beep that lowers your music instead of stopping it"),
                     settings.restSoundEnabled
                 ) { onUpdateSettings(settings.copy(restSoundEnabled = it)) }
+                ToggleRow(tr("Effort per set"), tr("After a set, tap how many more reps you had in you"), settings.trackEffort) {
+                    onUpdateSettings(settings.copy(trackEffort = it))
+                }
                 ToggleRow(tr("Keep screen on"), tr("While a workout is open"), settings.keepScreenAwake) {
                     onUpdateSettings(settings.copy(keepScreenAwake = it))
                 }
@@ -640,6 +645,7 @@ private fun HealthConnectGroup(onImported: () -> Unit) {
 }
 
 private const val PRIVACY_POLICY_URL = "https://vanya3105.github.io/Kilonaut/privacy.html"
+private const val WEBSITE_URL = "https://vanya3105.github.io/Kilonaut/"
 private const val FEEDBACK_EMAIL = "evtushenkovanya16@gmail.com"
 
 private fun appVersion(context: android.content.Context): String =
@@ -662,6 +668,24 @@ private fun AboutGroup() {
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         SettingsGroup(tr("About")) {
+            LinkRow(Icons.Rounded.Share, tr("Share Kilonaut")) {
+                // Play users get the store page; everyone else the website with the download.
+                val link = if (AppUpdate.installedFromPlay(context)) "https://play.google.com/store/apps/details?id=${context.packageName}" else WEBSITE_URL
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, tr("I track my workouts with Kilonaut: {0}", link))
+                }
+                open(Intent.createChooser(send, tr("Share Kilonaut")), tr("No app to share with"))
+            }
+            // Rating only means something on Play; installs from GitHub have nowhere to rate.
+            if (AppUpdate.installedFromPlay(context)) {
+                LinkRow(Icons.Rounded.StarOutline, tr("Rate on Google Play")) {
+                    val market = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=${context.packageName}"))
+                    try { context.startActivity(market) } catch (_: ActivityNotFoundException) {
+                        open(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}")), tr("No browser on this phone"))
+                    }
+                }
+            }
             LinkRow(Icons.Rounded.MailOutline, tr("Send feedback")) {
                 // The version and phone go along, so a bug report says where it happened.
                 val body = "\n\n—\nKilonaut $version · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"

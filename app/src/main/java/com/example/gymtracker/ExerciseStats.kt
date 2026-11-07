@@ -39,6 +39,18 @@ data class ExerciseSession(
 @Immutable
 data class RepRecord(val reps: Int, val weightKg: Float, val workoutId: Long)
 
+internal val PERCENTAGES = listOf(100, 95, 90, 85, 80, 75, 70, 65, 60)
+
+/** Reps a percentage of the 1-rep max allows, by the same formula as the estimate (Epley). */
+internal fun repsAtPercent(pct: Int): Int = if (pct >= 100) 1 else (30f * (100f / pct - 1f)).roundToInt().coerceAtLeast(1)
+
+/** [pct] % of [oneRmKg], rounded down to the unit's plate step (stored in kg). */
+internal fun weightAtPercent(oneRmKg: Float, pct: Int, unit: WeightUnit): Float {
+    val shown = unit.fromKg(oneRmKg) * pct / 100f
+    val step = unit.defaultStep
+    return unit.toKg(kotlin.math.floor(shown / step) * step)
+}
+
 @Immutable
 data class ExerciseHistory(
     val name: String,

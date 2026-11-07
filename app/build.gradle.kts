@@ -30,8 +30,8 @@ android {
         applicationId = "com.vanyaevtushenko.gymtracker"
         minSdk = 26
         targetSdk = 37
-        versionCode = 38
-        versionName = "3.8.0"
+        versionCode = 39
+        versionName = "3.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

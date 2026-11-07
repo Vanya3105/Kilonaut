@@ -179,6 +179,13 @@ fun ExerciseDetailScreen(
             item { RepRecordsCard(stats, Modifier.enterAnimation(1)) }
         }
 
+        // Plan a heavy or light day from the latest estimate, which moves with you more than the all-time best.
+        val base = stats.sessions.firstOrNull()?.estimated1RmKg?.takeIf { it > 0f } ?: stats.best1RmKg
+        if (stats.type == ExerciseType.WEIGHT_REPS && base > 0f) {
+            item { SectionHeader(tr("Percentages")) }
+            item { PercentagesCard(base, Modifier.enterAnimation(2)) }
+        }
+
         item { SectionHeader(tr("History")) }
         items(stats.sessions, key = { it.workoutId }) { session -> SessionCard(session) }
     }
@@ -371,6 +378,32 @@ private fun SessionChart(points: List<Pair<Long, Float>>, selected: Int?, axisLa
     }
 }
 
+/**
+ * The estimated 1-rep max worked back to training weights: 95 % for about 2 reps down to 60 % for
+ * about 20, rounded to what the plates make.
+ */
+@Composable
+private fun PercentagesCard(oneRmKg: Float, modifier: Modifier = Modifier) {
+    val P = LocalPalette.current
+    val unit = Units.current
+    AppCard(modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 4.dp)) {
+        Text(
+            tr("From your latest estimated 1-rep max, {0}", formatWeightKg(oneRmKg)),
+            style = AppType.caption, color = P.textSecondary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+        PERCENTAGES.forEach { pct ->
+            Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(P.borderSubtle))
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("$pct%", style = AppType.label.copy(fontFeatureSettings = "tnum"), color = P.accentPrimary, modifier = Modifier.width(52.dp))
+                val reps = repsAtPercent(pct)
+                Text(if (reps == 1) tr("1 rep") else tr("about {0} reps", reps), style = AppType.body, color = P.textSecondary, modifier = Modifier.weight(1f))
+                Text(formatWeightKg(weightAtPercent(oneRmKg, pct, unit)), style = AppType.number, color = P.textPrimary)
+            }
+        }
+    }
+}
+
 @Composable
 private fun RepRecordsCard(stats: ExerciseHistory, modifier: Modifier = Modifier) {
     val P = LocalPalette.current
@@ -428,6 +461,10 @@ private fun SessionCard(session: ExerciseSession) {
                 if (kind != null) {
                     Spacer(Modifier.width(8.dp))
                     Text(kind, style = AppType.caption, color = P.textTertiary)
+                }
+                if (set.rir >= 0) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(effortText(set.rir), style = AppType.caption, color = P.textTertiary)
                 }
             }
         }

@@ -100,9 +100,25 @@ class DatabaseMigrationTest {
     }
 
     @Test
-    fun v1ToV5_inOneGo() {
+    fun v5ToV6_addsEffortColumn_unrecordedForOldSets() {
+        helper.createDatabase(dbName, 5).use { db ->
+            db.execSQL("INSERT INTO workouts (id, splitTitle, dateKey, displayDate, durationSeconds, bodyWeightKg, skippedExercises, totalVolumeKg, prsHit) VALUES (1, 'Push', '2026-11-01', '', 3000, 0, '', 0, 0)")
+            db.execSQL("INSERT INTO exercises (id, name, nameKey, muscle, note, type) VALUES (1, 'Bench Press', 'bench press', '', '', 'WEIGHT_REPS')")
+            db.execSQL("INSERT INTO workout_exercises (id, workoutId, exerciseId, position, targetMuscle, restSeconds, isSkipped, isSuperset) VALUES (1, 1, 1, 0, '', 90, 0, 0)")
+            db.execSQL("INSERT INTO workout_sets (workoutExerciseId, position, setNumber, weight, reps, intensityType, isWarmup, isCompleted, restSeconds) VALUES (1, 0, 1, '80', '8', 'NORMAL', 0, 1, 90)")
+        }
+        helper.runMigrationsAndValidate(dbName, 6, true).use { db ->
+            db.query("SELECT rir FROM workout_sets").use { c ->
+                c.moveToFirst()
+                assertEquals(-1, c.getInt(0))
+            }
+        }
+    }
+
+    @Test
+    fun v1ToV6_inOneGo() {
         helper.createDatabase(dbName, 1).close()
-        helper.runMigrationsAndValidate(dbName, 5, true, MIGRATION_1_2).close()
+        helper.runMigrationsAndValidate(dbName, 6, true, MIGRATION_1_2).close()
     }
 
     @Test

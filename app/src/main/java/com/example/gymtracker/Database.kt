@@ -96,7 +96,8 @@ data class WorkoutSetEntity(
     val isCompleted: Boolean,
     val restSeconds: Int,
     @ColumnInfo(defaultValue = "") val seconds: String = "",
-    @ColumnInfo(defaultValue = "") val distanceM: String = ""
+    @ColumnInfo(defaultValue = "") val distanceM: String = "",
+    @ColumnInfo(defaultValue = "-1") val rir: Int = -1
 )
 
 @Entity(tableName = "body_weight")
@@ -228,10 +229,10 @@ interface GymDao {
         ExerciseEntity::class, WorkoutEntity::class, WorkoutExerciseEntity::class, WorkoutSetEntity::class,
         BodyWeightEntity::class, SplitTemplateItemEntity::class, ProgramEntity::class, ProgramSplitEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
     // v3 only adds tables, v4 and v5 only add nullable columns: Room migrates those by itself.
-    autoMigrations = [AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5)]
+    autoMigrations = [AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6)]
 )
 @TypeConverters(Converters::class)
 abstract class GymDatabase : RoomDatabase() {
@@ -347,7 +348,7 @@ object RoomStore {
                             SetEntry(
                                 setNumber = s.setNumber, weight = s.weight, reps = s.reps, isWarmup = s.isWarmup,
                                 intensityType = s.intensityType, isCompleted = s.isCompleted, restSeconds = s.restSeconds,
-                                seconds = s.seconds, distanceM = s.distanceM
+                                seconds = s.seconds, distanceM = s.distanceM, rir = s.rir
                             )
                         }
                     )
@@ -459,7 +460,7 @@ object RoomStore {
                 WorkoutSetEntity(
                     workoutExerciseId = rowId, position = j, setNumber = s.setNumber, weight = s.weight, reps = s.reps,
                     intensityType = s.intensityType, isWarmup = s.isWarmup, isCompleted = s.isCompleted, restSeconds = s.restSeconds,
-                    seconds = s.seconds, distanceM = s.distanceM
+                    seconds = s.seconds, distanceM = s.distanceM, rir = s.rir
                 )
             })
         }

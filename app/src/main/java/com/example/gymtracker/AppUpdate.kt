@@ -50,7 +50,7 @@ object AppUpdate {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private fun installedFromPlay(context: Context): Boolean = try {
+    internal fun installedFromPlay(context: Context): Boolean = try {
         val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
         } else {

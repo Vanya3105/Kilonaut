@@ -544,6 +544,7 @@ fun GymTrackerApp(
     val upNext = remember(history, userProfile.splitProgram) { computeWeekSummary(history, 0, userProfile.splitProgram).recommendedSplit }
     LaunchedEffect(upNext, activeSplit?.title) {
         withContext(Dispatchers.Default) { AppShortcuts.update(context, upNext.takeIf { it.isNotBlank() }, activeSplit?.title) }
+        WorkoutTileService.refresh(context)
     }
     var logWeightRequest by remember { mutableIntStateOf(0) }
     val shortcut = AppShortcuts.pending
@@ -1017,6 +1018,17 @@ fun GymTrackerApp(
                 },
                 onDismiss = keepGoing
             )
+        }
+
+        // After an update: what it brought, once, when nothing else is in the way.
+        var whatsNew by remember { mutableStateOf(WhatsNew.pending(context)) }
+        whatsNew?.let { version ->
+            if (!showOnboarding && !showWelcome && !workoutVisible) {
+                WhatsNewSheet(version) {
+                    WhatsNew.markSeen(context, version)
+                    whatsNew = null
+                }
+            }
         }
 
         val fullScreenPage = workoutVisible || openExercise != null || editingProgramId != null ||

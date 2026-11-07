@@ -9,6 +9,14 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Small extras** (branch `small-extras`, on top of master, not tested on the phone yet). Version is now 3.9.0 (code 39).
+- [x] What's new: a sheet once after an update (not on a fresh install), notes per version in `WhatsNew.notesFor`; never over onboarding or a workout.
+- [x] About: Share Kilonaut (Play link for Play installs, else the website); Rate on Google Play for Play installs only.
+- [x] Effort per set (Workouts → Effort per set, off by default): "Reps left? 0 1 2 3 4+" under the set just ticked; stored as `SetEntry.rir` (Room v6, auto-migration; backups and the running workout carry it); shown on the exercise page's sessions.
+- [x] Percentages card on weight exercises: 100–60 % of the latest estimated 1RM, about how many reps, rounded down to the plates.
+- [x] Quick Settings tile: Start workout (subtitle: the next day) / Resume (lit while one runs).
+- Before the 3.9.0 release: add a "What's new" line for anything else that lands; the watch app's version too.
+
 **Weigh-in reminder** (branch `weigh-reminder`) is tested on the owner's phone and merged (2026-11-07): Profile → Reminders → Morning weigh-in, with its own time (default 7:30). Every day, not once that day's weigh-in is in; Log opens the weigh-in sheet. Times are picked on a day dial (`TimeDial.kt`): a 24-hour ring coloured night→dawn→noon→dusk, drag the sun/moon, ticks every quarter hour, −5/+5. Turning a reminder on asks once, in the app's own popup, to allow exact alarms (opens Alarms & reminders); granting reschedules them on time.
 
 **Polish 4** (branch `polish-4`) is tested on the owner's phone and merged (2026-11-07):

@@ -1,5 +1,7 @@
 package com.example.gymtracker
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1076,6 +1078,16 @@ private fun ExerciseCard(
                     onToggle = { onToggleSet(setIdx) },
                     haptics = haptics
                 )
+                // Effort: asked under the set just ticked, until it's answered.
+                if (settings.trackEffort && exercise.type.usesReps) {
+                    EffortPicker(
+                        visible = setIdx == exercise.sets.indexOfLast { it.isCompleted } && !set.isWarmupSet && set.rir < 0,
+                        onPick = { rir ->
+                            haptics.tick()
+                            onUpdate { ex -> ex.copy(sets = ex.sets.toMutableList().also { it[setIdx] = it[setIdx].copy(rir = rir) }) }
+                        }
+                    )
+                }
             }
 
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1149,6 +1161,31 @@ private fun SuggestionLine(suggestion: Suggestion, alreadyApplied: Boolean, modi
                 maxLines = 1,
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(P.bgControl).pressable(onClick = onUse).padding(horizontal = 12.dp, vertical = 7.dp)
             )
+        }
+    }
+}
+
+/** "Reps left? 0 1 2 3 4+", sliding in under a set just ticked; a tap answers and folds it away. */
+@Composable
+private fun EffortPicker(visible: Boolean, onPick: (Int) -> Unit) {
+    val P = LocalPalette.current
+    AnimatedVisibility(visible, enter = expandVertically(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)) + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+        Row(Modifier.fillMaxWidth().padding(start = 40.dp, top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Reps left?"), style = AppType.caption, color = P.textSecondary, modifier = Modifier.weight(1f))
+            (0..4).forEach { n ->
+                Box(
+                    Modifier
+                        .padding(start = 6.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(P.bgControl)
+                        .pressable(pressedScale = 0.88f) { onPick(n) }
+                        .semantics { contentDescription = effortText(n) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(if (n == 4) "4+" else "$n", style = AppType.label, color = P.textPrimary)
+                }
+            }
         }
     }
 }

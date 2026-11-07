@@ -44,6 +44,8 @@ data class AppSettings(
     val restTimerSeconds: Int = 90,
     val keepScreenAwake: Boolean = true,
     val restSoundEnabled: Boolean = true,
+    /** Ask how many reps were left after each work set. */
+    val trackEffort: Boolean = false,
     /** Workout reminder days (Calendar.SUNDAY…); none = reminders off. */
     val reminderDays: Set<Int> = emptySet(),
     /** Reminder time, minutes after midnight. */
@@ -143,7 +145,9 @@ data class SetEntry(
     /** Time-based sets: seconds as typed digits ("" when unused). */
     val seconds: String = "",
     /** Distance sets: metres ("" when unused). */
-    val distanceM: String = ""
+    val distanceM: String = "",
+    /** Reps left in the tank when it was done (0…4, 4 = four or more); -1 when not recorded. */
+    val rir: Int = -1
 ) {
     // Parsed once per set rather than on every read: records, stats, suggestions and charts read
     // these for every set in history. Body properties, so they stay out of equals() and copy().
