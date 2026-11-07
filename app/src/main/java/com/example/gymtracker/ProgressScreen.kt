@@ -46,7 +46,9 @@ fun ProgressScreen(
     onOpenExercise: (String) -> Unit,
     onMergeExercises: (from: String, into: String) -> Unit,
     /** Goes up by one for each "Log body weight" shortcut: opens the weigh-in sheet. */
-    logWeightRequest: Int = 0
+    logWeightRequest: Int = 0,
+    /** The training calendar lives in History. */
+    onOpenCalendar: () -> Unit = {}
 ) {
     val P = LocalPalette.current
     val context = LocalContext.current
@@ -83,7 +85,7 @@ fun ProgressScreen(
             )
         }
 
-        item { ConsistencyCard(history, Modifier.enterAnimation(0)) }
+        item { ConsistencyCard(history, onOpenCalendar, Modifier.enterAnimation(0)) }
 
         item {
             SectionHeader(

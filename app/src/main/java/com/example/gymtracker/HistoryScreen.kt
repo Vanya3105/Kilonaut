@@ -67,6 +67,8 @@ fun HistoryScreen(
 ) {
     val P = LocalPalette.current
     var mode by rememberSaveable { mutableStateOf(HistoryMode.WEEK) }
+    // The day the month calendar shows, shared with the training-days grid above it.
+    var selectedDay by rememberSaveable { mutableStateOf(DateUtils.formatDayKey(java.util.Date())) }
     var photoToView by remember { mutableStateOf<String?>(null) }
 
     val byExercise = remember(history) { historyByExercise(history) }
@@ -81,6 +83,16 @@ fun HistoryScreen(
         Column(Modifier.statusBarsPadding().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp)) {
             Text(tr("History"), style = AppType.display, color = P.textPrimary)
             Spacer(Modifier.height(14.dp))
+            // One calendar, one place: six months at a glance; a day opens in the month below.
+            TrainingDaysCard(
+                history,
+                selectedDayKey = if (mode == HistoryMode.MONTH) selectedDay else null,
+                onPickDay = { millis ->
+                    selectedDay = DateUtils.formatDayKey(java.util.Date(millis))
+                    mode = HistoryMode.MONTH
+                }
+            )
+            Spacer(Modifier.height(12.dp))
             SegmentedControl(
                 options = listOf(HistoryMode.WEEK to tr("Week"), HistoryMode.MONTH to tr("Month")),
                 selected = mode,
@@ -97,7 +109,7 @@ fun HistoryScreen(
             CompositionLocalProvider(LocalRepeatWorkout provides onRepeatWorkout) {
                 when (m) {
                     HistoryMode.WEEK -> WeekView(history, userProfile, onOpenWorkout, onDeleteWorkout, { photoToView = it })
-                    HistoryMode.MONTH -> MonthView(history, onOpenWorkout, onDeleteWorkout, { photoToView = it })
+                    HistoryMode.MONTH -> MonthView(history, selectedDay, { selectedDay = it }, onOpenWorkout, onDeleteWorkout, { photoToView = it })
                 }
             }
         }
@@ -182,17 +194,19 @@ private fun WeekView(
 @Composable
 private fun MonthView(
     history: List<CompletedWorkout>,
+    selectedKey: String,
+    onSelect: (String) -> Unit,
     onOpen: (CompletedWorkout) -> Unit,
     onDelete: (CompletedWorkout) -> Unit,
     onViewPhoto: (String) -> Unit
 ) {
     val P = LocalPalette.current
-    val today = remember { Calendar.getInstance() }
-    var year by rememberSaveable { mutableIntStateOf(today.get(Calendar.YEAR)) }
-    var month by rememberSaveable { mutableIntStateOf(today.get(Calendar.MONTH)) }
+    // Opens on the selected day's month (today, or the day picked on the grid above).
+    val shownMonth = remember(selectedKey) { Calendar.getInstance().apply { time = DateUtils.parseDayKey(selectedKey) ?: java.util.Date() } }
+    var year by rememberSaveable(selectedKey) { mutableIntStateOf(shownMonth.get(Calendar.YEAR)) }
+    var month by rememberSaveable(selectedKey) { mutableIntStateOf(shownMonth.get(Calendar.MONTH)) }
     val rtl = isRtl()
     val todayKey = remember { DateUtils.formatDayKey(Date()) }
-    var selectedKey by rememberSaveable { mutableStateOf(todayKey) }
     val byDate = remember(history) { history.groupBy { it.dateKey } }
 
     fun previousMonth() { if (month == 0) { month = 11; year-- } else month-- }
@@ -263,7 +277,7 @@ private fun MonthView(
                                     .padding(2.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(bg)
-                                    .pressable(pressedScale = 0.9f) { selectedKey = key },
+                                    .pressable(pressedScale = 0.9f) { onSelect(key) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(

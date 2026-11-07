@@ -654,6 +654,7 @@ fun GymTrackerApp(
                         },
                         onDeleteWeight = { id -> deleteWeighIn(id) },
                         logWeightRequest = logWeightRequest,
+                        onOpenCalendar = { selectedTab = AppTab.HISTORY },
                         onOpenExercise = { openExercise = it },
                         onMergeExercises = { from, into -> mergeExercises(from, into) }
                     )

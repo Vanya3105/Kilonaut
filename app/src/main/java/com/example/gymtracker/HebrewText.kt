@@ -880,6 +880,8 @@ internal object HebrewText {
         m["{0}: {1}"] = "{0}: {1}"
         m["empty"] = "ריק"
         m["Plates"] = "פלטות"
+        m["Last 6 months"] = "6 החודשים האחרונים"
+        m["Training calendar"] = "לוח האימונים"
         m["Skipped once you've weighed in."] = "לא אחרי שכבר נשקלתם."
         m["Skipped on days you've trained."] = "לא בימים שכבר התאמנתם."
         m["What went wrong and the phone model, never your workouts."] = "מה השתבש ודגם הטלפון, אף פעם לא האימונים שלכם."

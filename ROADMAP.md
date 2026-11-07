@@ -9,6 +9,8 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**One calendar** (branch `one-calendar`, on top of `pro-pass`, not tested on the phone yet): the training-days grid (now 26 weeks, `TrainingDaysCard`) moved from Progress to the top of History; tapping a day opens it in History's month calendar, which rings it on the grid. Progress keeps the streak and counts (`ConsistencyCard`), and a tap opens History.
+
 **Professional pass** (branch `pro-pass`, not tested on the phone yet), after the owner worried the app feels childish:
 - [x] Motion settles instead of wobbling: no spring below 0.75 damping (tab icons, set tick pop 1.18 → 1.08, badges, picker check, nav pill, press feedback, consistency calendar).
 - [x] Confetti only for milestones (`isMilestone`: 1st, 10th, 25th, 50th, 100th workout, then every 100th), none in the workout's finish sheet. No exclamation marks: "Workout complete", "New personal best".

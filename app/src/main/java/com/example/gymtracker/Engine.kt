@@ -371,6 +371,7 @@ object DateUtils {
     private val monthTitleFmt = SimpleDateFormat("MMMM yyyy", shownLocale)
 
     @Synchronized fun formatDayKey(date: Date): String = dayKeyFmt.format(date)
+    @Synchronized fun parseDayKey(key: String): Date? = runCatching { dayKeyFmt.parse(key) }.getOrNull()
     @Synchronized fun formatDisplayDate(date: Date): String = displayDateFmt.format(date)
     @Synchronized fun formatShortDay(date: Date): String = shortDayFmt.format(date)
     @Synchronized fun formatShortDayYear(date: Date): String = shortDayYearFmt.format(date)

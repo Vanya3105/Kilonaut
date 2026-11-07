@@ -5,6 +5,13 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,10 +39,13 @@ data class Consistency(
     val thisMonth: Int,
     val total: Int,
     /** [weeks] columns of 7 days, oldest first, Sunday-or-locale-first; workouts that day, -1 for days to come. */
-    val days: List<List<Int>>
+    val days: List<List<Int>>,
+    /** Midnight of the first day in [days]. */
+    val firstDayMillis: Long = 0L
 )
 
-internal const val CONSISTENCY_WEEKS = 18
+/** Six months: wide and short at the top of History. */
+internal const val CONSISTENCY_WEEKS = 26
 
 /** How many columns a day takes to land once the sweep reaches it. */
 private const val SWEEP_TAIL = 4f
@@ -71,6 +81,7 @@ internal fun computeConsistency(history: List<CompletedWorkout>, nowMillis: Long
 
     val today = dayStart(nowMillis).timeInMillis
     val start = Calendar.getInstance().apply { timeInMillis = thisWeek; add(Calendar.WEEK_OF_YEAR, -(weeks - 1)) }
+    val firstDay = start.timeInMillis
     val days = List(weeks) {
         List(7) {
             val d = start.timeInMillis
@@ -78,50 +89,85 @@ internal fun computeConsistency(history: List<CompletedWorkout>, nowMillis: Long
             if (d > today) -1 else perDay[d] ?: 0
         }
     }
-    return Consistency(streak, trainedThisWeek, thisMonth, history.size, days)
+    return Consistency(streak, trainedThisWeek, thisMonth, history.size, days, firstDay)
 }
 
-/** Progress's opening card: the streak, this month, all time, and a calendar of training days. */
+/** "4 weeks in a row" or "Training days", with the line under it. */
 @Composable
-fun ConsistencyCard(history: List<CompletedWorkout>, modifier: Modifier = Modifier) {
+private fun StreakHeadline(c: Consistency) {
+    val P = LocalPalette.current
+    Text(
+        // One week isn't a streak yet.
+        if (c.weekStreak >= 2) tr("{0} weeks in a row", c.weekStreak) else tr("Training days"),
+        style = AppType.headline,
+        color = if (c.weekStreak >= 2) P.accentPrimary else P.textPrimary
+    )
+    Text(
+        when {
+            c.total == 0 -> tr("Your first workout starts the streak.")
+            c.weekStreak > 0 && !c.trainedThisWeek -> tr("Train this week to keep it going.")
+            c.weekStreak == 0 -> tr("One workout this week starts a new streak.")
+            c.weekStreak == 1 -> tr("Train next week too and it's a streak.")
+            else -> tr("Every week with a workout counts.")
+        },
+        style = AppType.caption,
+        color = P.textSecondary
+    )
+}
+
+/**
+ * Progress's opening card: the streak and the counts. The calendar itself lives in History (one
+ * calendar, one place); a tap goes there.
+ */
+@Composable
+fun ConsistencyCard(history: List<CompletedWorkout>, onOpenCalendar: () -> Unit, modifier: Modifier = Modifier) {
     val P = LocalPalette.current
     val c = remember(history) { computeConsistency(history) }
-    // Once per launch (the tab stays composed): the trained days fill in oldest to newest and the
-    // numbers count up with them. A new workout later just appears.
+    // Once per launch (the tab stays composed): the numbers count up.
     val reveal = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(900, delayMillis = 120, easing = FastOutSlowInEasing)) }
-    AppCard(modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    // One week isn't a streak yet.
-                    if (c.weekStreak >= 2) tr("{0} weeks in a row", c.weekStreak) else tr("Training days"),
-                    style = AppType.headline,
-                    color = if (c.weekStreak >= 2) P.accentPrimary else P.textPrimary
-                )
-                Text(
-                    when {
-                        c.total == 0 -> tr("Your first workout starts the streak.")
-                        c.weekStreak > 0 && !c.trainedThisWeek -> tr("Train this week to keep it going.")
-                        c.weekStreak == 0 -> tr("One workout this week starts a new streak.")
-                        c.weekStreak == 1 -> tr("Train next week too and it's a streak.")
-                        else -> tr("Every week with a workout counts.")
-                    },
-                    style = AppType.caption,
-                    color = P.textSecondary
-                )
-            }
+    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(700, delayMillis = 120, easing = FastOutSlowInEasing)) }
+    AppCard(modifier.fillMaxWidth(), onClick = onOpenCalendar) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { StreakHeadline(c) }
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, tr("Training calendar"), tint = P.textTertiary)
         }
-        Spacer(Modifier.height(14.dp))
-        TrainingCalendar(c.days) { reveal.value }
         Spacer(Modifier.height(14.dp))
         Row {
             val f = reveal.value
             fun counted(n: Int) = "${(n * f).roundToInt()}"
             Stat(tr("This month"), counted(c.thisMonth), Modifier.weight(1f))
             Stat(tr("All time"), counted(c.total), Modifier.weight(1f))
-            Stat(tr("Last {0} weeks", CONSISTENCY_WEEKS), counted(c.days.sumOf { w -> w.sumOf { it.coerceAtLeast(0) } }), Modifier.weight(1f))
+            Stat(tr("Last 6 months"), counted(c.days.sumOf { w -> w.sumOf { it.coerceAtLeast(0) } }), Modifier.weight(1f))
         }
+    }
+}
+
+/**
+ * History's overview: the streak and six months of training days. Tap a day to open it in the
+ * month calendar; [selectedDayKey] (the day the month calendar shows) is ringed.
+ */
+@Composable
+fun TrainingDaysCard(history: List<CompletedWorkout>, selectedDayKey: String?, onPickDay: (Long) -> Unit, modifier: Modifier = Modifier) {
+    val c = remember(history) { computeConsistency(history) }
+    val reveal = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(900, delayMillis = 120, easing = FastOutSlowInEasing)) }
+    val selected = remember(selectedDayKey, c.firstDayMillis) {
+        selectedDayKey?.let { key ->
+            val cal = Calendar.getInstance().apply { timeInMillis = c.firstDayMillis }
+            (0 until c.days.size * 7).firstOrNull { i ->
+                val match = DateUtils.formatDayKey(cal.time) == key
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+                match
+            }
+        }
+    }
+    AppCard(modifier.fillMaxWidth()) {
+        StreakHeadline(c)
+        Spacer(Modifier.height(12.dp))
+        TrainingCalendar(c.days, selected, onTap = { index ->
+            val cal = Calendar.getInstance().apply { timeInMillis = c.firstDayMillis; add(Calendar.DAY_OF_YEAR, index) }
+            onPickDay(cal.timeInMillis)
+        }) { reveal.value }
     }
 }
 
@@ -136,19 +182,31 @@ private fun Stat(label: String, value: String, modifier: Modifier) {
 
 /**
  * One square per day, a column per week, newest on the end side; days with a workout in the accent,
- * popping in as [reveal] (read while drawing, so the animation only redraws) sweeps across. Today
- * has a ring until it has a workout.
+ * growing in as [reveal] (read while drawing, so the animation only redraws) sweeps across. Today
+ * has a ring until it has a workout; [selected] (a day index from the first) a firm one. A tap on a
+ * past day gives its index to [onTap].
  */
 @Composable
-private fun TrainingCalendar(days: List<List<Int>>, reveal: () -> Float) {
+private fun TrainingCalendar(days: List<List<Int>>, selected: Int?, onTap: (Int) -> Unit, reveal: () -> Float) {
     val P = LocalPalette.current
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val trained = days.sumOf { w -> w.count { it > 0 } }
+    val currentTap by rememberUpdatedState(onTap)
     Canvas(
         Modifier
             .fillMaxWidth()
             .aspectRatio(days.size / 7f)
             .semantics { contentDescription = tr("{0} training days in the last {1} weeks", trained, days.size) }
+            .pointerInput(days, rtl) {
+                detectTapGestures { pos ->
+                    val gap = size.width * 0.012f
+                    val cell = (size.width - gap * (days.size - 1)) / days.size
+                    val slot = (pos.x / (cell + gap)).toInt().coerceIn(0, days.lastIndex)
+                    val col = if (rtl) days.lastIndex - slot else slot
+                    val row = (pos.y / (cell + gap)).toInt().coerceIn(0, 6)
+                    if (days[col][row] >= 0) currentTap(col * 7 + row)
+                }
+            }
     ) {
         val gap = size.width * 0.012f
         val cell = (size.width - gap * (days.size - 1)) / days.size
@@ -173,8 +231,11 @@ private fun TrainingCalendar(days: List<List<Int>>, reveal: () -> Float) {
                             Offset(x + inset, y + inset), Size(grow, grow), CornerRadius(grow * 0.28f)
                         )
                     }
-                } else if (col == lastCol && row == todayRow) {
-                    val w = cell * 0.09f
+                }
+                val w = cell * 0.12f
+                if (selected == col * 7 + row) {
+                    drawRoundRect(P.textPrimary, Offset(x - w / 2, y - w / 2), Size(cell + w, cell + w), CornerRadius(cell * 0.32f), style = Stroke(w))
+                } else if (count == 0 && col == lastCol && row == todayRow) {
                     drawRoundRect(
                         P.accentPrimary.copy(alpha = 0.6f * reveal()),
                         Offset(x + w / 2, y + w / 2), Size(cell - w, cell - w), CornerRadius(cell * 0.24f), style = Stroke(w)
