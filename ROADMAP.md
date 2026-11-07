@@ -9,7 +9,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**Swap + Short on time** (branch `swap-and-time`, not tested on the phone yet):
+**Swap + Short on time** (branch `swap-and-time`) is tested on the owner's phone and merged (2026-11-07):
 - [x] Machine taken? (exercise ⋮, before any of its sets is done): three alternatives for the same muscle, same movement first (`movementOf`), fitting the equipment, ones done before first, preferably other equipment; each shows the set it would start at. Keeps the set count; "Keep it in <day>" replaces it in the day (position and target kept, `LocalStorage.replaceInSplitTemplate`); Undo.
 - [x] Short on time? (Today's Up next): "~N min" estimate (sets, rests, changeovers: `estimateSeconds`), pick 20–75 min, see what's cut (warm-ups, then isolation/later sets to 2, main lifts to 2, then whole exercises from the end, isolation first: `trimToMinutes`), start the shorter version.
 - [x] What's new for 1.0.0 beta 1 lists these, the weight widget and Do it again.
