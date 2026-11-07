@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,8 +41,9 @@ object WhatsNew {
             Item(Icons.Rounded.NotificationsActive, tr("Reminders"), tr("A nudge on your training days and a morning weigh-in, set on a new day dial. Profile → Reminders.")),
             Item(Icons.Rounded.TouchApp, tr("Shortcuts on the app icon"), tr("Long-press Kilonaut to start your next workout or log your weight.")),
             Item(Icons.AutoMirrored.Rounded.ShowChart, tr("A better body-weight chart"), tr("Ranges, a smoothed trend, and drag to see any day.")),
-            Item(Icons.Rounded.EditNote, tr("More in a workout"), tr("Notes, warm-up sets in one tap, and effort per set if you want it. Percentages on every lift.")),
-            Item(Icons.Rounded.Widgets, tr("Widgets for any wallpaper"), tr("They follow light and dark mode, or take your wallpaper's colours.")),
+            Item(Icons.Rounded.SwapHoriz, tr("Machine taken? Short on time?"), tr("Swap an exercise for one that trains the same muscle, or fit the day into 20–60 minutes.")),
+            Item(Icons.Rounded.EditNote, tr("More in a workout"), tr("Notes, warm-up sets in one tap, effort per set if you want it, percentages on every lift, and Do it again from History.")),
+            Item(Icons.Rounded.Widgets, tr("Widgets for any wallpaper"), tr("They follow light and dark mode or your wallpaper's colours. New: a body-weight widget.")),
             Item(Icons.Rounded.Watch, tr("On the watch"), tr("Your heart rate while you rest, and one more set from your wrist."))
         )
         else -> emptyList()

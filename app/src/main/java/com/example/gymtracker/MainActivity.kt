@@ -425,7 +425,13 @@ fun GymTrackerApp(
         notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    fun startWorkout(split: WorkoutSplit) {
+    /** The day's exercises as a new workout would start them. */
+    fun planFor(split: WorkoutSplit) = LocalStorage.loadTemplateForSplit(context, split.title).map { (exName, muscle) ->
+        newExerciseEntry(context, split.title, exName, muscle, history, settings)
+    }
+
+    /** [entries]: a shorter version from "Short on time?"; the day as planned otherwise. */
+    fun startWorkout(split: WorkoutSplit, entries: List<ExerciseEntry>? = null) {
         haptics.confirm()
         val running = activeSplit
         if (running != null) {
@@ -434,9 +440,7 @@ fun GymTrackerApp(
             else switchingTo = split
             return
         }
-        val entries = LocalStorage.loadTemplateForSplit(context, split.title).map { (exName, muscle) ->
-            newExerciseEntry(context, split.title, exName, muscle, history, settings)
-        }
+        val entries = entries ?: planFor(split)
         activeSplit = split
         currentExercises = entries
         workoutExpanded = true
@@ -626,6 +630,8 @@ fun GymTrackerApp(
                         activeSplitTitle = activeSplit?.title,
                         activeExerciseCount = currentExercises.count { !it.isSkipped },
                         onStartWorkout = { startWorkout(it) },
+                        planFor = { planFor(it) },
+                        onStartPlanned = { split, entries -> startWorkout(split, entries) },
                         onStartQuickWorkout = { startQuickWorkout() },
                         onOpenHistory = { selectedTab = AppTab.HISTORY },
                         tipsAllowed = !showOnboarding && !(activeSplit != null && workoutExpanded) && editingPastWorkout == null

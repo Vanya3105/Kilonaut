@@ -843,6 +843,20 @@ object LocalStorage {
         }
     }
 
+    /** [oldName] on [splitTitle] becomes [newName], in its place and with its target. */
+    fun replaceInSplitTemplate(context: Context, splitTitle: String, oldName: String, newName: String, muscle: String) {
+        val list = loadTemplateForSplit(context, splitTitle)
+        val oldKey = exerciseKey(oldName)
+        if (list.none { exerciseKey(it.first) == oldKey }) return
+        val replaced = list.map { if (exerciseKey(it.first) == oldKey) newName to muscle else it }
+        val targets = data(context).targets[splitTitle].orEmpty().let { t ->
+            t[oldKey]?.let { (t - oldKey) + (exerciseKey(newName) to it) } ?: t
+        }
+        editData(context, { it.copy(templates = it.templates + (splitTitle to replaced), targets = it.targets + (splitTitle to targets)) }) {
+            RoomStore.saveTemplate(it, splitTitle, replaced, targets)
+        }
+    }
+
     fun addExerciseToSplitTemplate(context: Context, splitTitle: String, name: String, muscle: String = "Custom") {
         val current = loadTemplateForSplit(context, splitTitle)
         if (current.none { it.first.equals(name, ignoreCase = true) }) {

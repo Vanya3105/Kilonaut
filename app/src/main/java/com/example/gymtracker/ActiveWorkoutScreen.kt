@@ -62,6 +62,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
@@ -231,6 +232,9 @@ fun ActiveWorkoutScreen(
         while (end < active.lastIndex && active[end].value.isSuperset) end++
         return start..end
     }
+
+    // The exercise being swapped for another ("Machine taken?").
+    var swapping by remember { mutableStateOf<String?>(null) }
 
     fun updateAt(exIdx: Int, transform: (ExerciseEntry) -> ExerciseEntry) {
         val list = latestExercises.toMutableList()
@@ -426,6 +430,8 @@ fun ActiveWorkoutScreen(
                             tipPreviousModifier = Modifier.tipTarget(prevTour, "PREVIOUS"),
                             haptics = haptics,
                             onUpdate = { transform -> updateAt(exIdx, transform) },
+                            // Only before any of its sets is done: a swap would throw those away.
+                            onSwap = if (!isEditingPastWorkout && exercise.sets.none { it.isCompleted }) ({ haptics.tick(); swapping = exercise.name }) else null,
                             onToggleSet = { setIdx -> toggleSet(pos, setIdx) },
                             onSetRest = { setIdx, sec ->
                                 haptics.tick()
@@ -621,6 +627,40 @@ fun ActiveWorkoutScreen(
         )
     }
 
+
+    swapping?.let { name ->
+        val idx = latestExercises.indexOfFirst { it.name == name }
+        val current = latestExercises.getOrNull(idx)
+        if (current == null) {
+            swapping = null
+        } else {
+            val onDay = remember(split.title, name) {
+                split.title != QUICK_WORKOUT_TITLE && LocalStorage.loadTemplateForSplit(context, split.title).any { exerciseKey(it.first) == exerciseKey(name) }
+            }
+            SwapExerciseSheet(
+                exercise = current,
+                splitTitle = split.title,
+                inWorkout = latestExercises.map { it.name },
+                history = history,
+                settings = settings,
+                equipment = userProfile.equipment,
+                canKeep = onDay,
+                onDismiss = { swapping = null },
+                onSwap = { replacement, keep ->
+                    swapping = null
+                    haptics.confirm()
+                    val day = if (keep) LocalStorage.daySnapshot(context, split.title) else null
+                    updateAt(idx) { replacement }
+                    if (keep) LocalStorage.replaceInSplitTemplate(context, split.title, current.name, replacement.name, replacement.targetMuscle)
+                    AppSnackbar.show(tr("Swapped for {0}", shown(replacement.name)), tr("Undo")) {
+                        val at = latestExercises.indexOfFirst { it.name == replacement.name }
+                        if (at >= 0) updateAt(at) { current }
+                        day?.let { LocalStorage.restoreDay(context, it) }
+                    }
+                }
+            )
+        }
+    }
 
     if (confirmDiscard) {
         AlertDialog(
@@ -824,6 +864,7 @@ private fun ExerciseCard(
     tipPreviousModifier: Modifier = Modifier,
     haptics: Haptics,
     onUpdate: ((ExerciseEntry) -> ExerciseEntry) -> Unit,
+    onSwap: (() -> Unit)?,
     onToggleSet: (Int) -> Unit,
     onSetRest: (setIdx: Int, sec: Int) -> Unit,
     onSetExerciseRest: (Int) -> Unit,
@@ -966,6 +1007,13 @@ private fun ExerciseCard(
                                 val bar = if (usesPlates(exercise.name, exercise.type)) LocalStorage.loadPlateSetup(context, Units.current).barWeight else null
                                 onUpdate { ex -> withWarmups(ex, settings.weightStep, bar) }
                             }
+                        )
+                    }
+                    if (onSwap != null) {
+                        DropdownMenuItem(
+                            text = { Text(tr("Machine taken? Swap it"), style = AppType.body) },
+                            leadingIcon = { Icon(Icons.Rounded.SwapHoriz, null) },
+                            onClick = { menuOpen = false; onSwap() }
                         )
                     }
                     HorizontalDivider(color = P.borderSubtle)

@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -43,6 +44,9 @@ fun HomeScreen(
     /** Exercises in the running workout, which may differ from the day's list. */
     activeExerciseCount: Int,
     onStartWorkout: (WorkoutSplit) -> Unit,
+    /** The day's exercises as a workout would start them, for the time estimate and "Short on time?". */
+    planFor: (WorkoutSplit) -> List<ExerciseEntry> = { emptyList() },
+    onStartPlanned: (WorkoutSplit, List<ExerciseEntry>) -> Unit = { s, _ -> onStartWorkout(s) },
     onStartQuickWorkout: () -> Unit,
     onOpenHistory: () -> Unit,
     /** False while something covers Today (a workout, onboarding), so its tips wait. */
@@ -107,6 +111,8 @@ fun HomeScreen(
                     isInProgress = activeSplitTitle != null,
                     activeExerciseCount = activeExerciseCount,
                     onStart = { if (upNext.title == QUICK_WORKOUT_TITLE) onStartQuickWorkout() else onStartWorkout(upNext) },
+                    planFor = planFor,
+                    onStartPlanned = { onStartPlanned(upNext, it) },
                     modifier = Modifier
                         .enterAnimation(1)
                         .tipTarget(tour, "UP_NEXT")
@@ -192,6 +198,8 @@ private fun UpNextCard(
     isInProgress: Boolean,
     activeExerciseCount: Int,
     onStart: () -> Unit,
+    planFor: (WorkoutSplit) -> List<ExerciseEntry>,
+    onStartPlanned: (List<ExerciseEntry>) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val P = LocalPalette.current
@@ -201,6 +209,12 @@ private fun UpNextCard(
         if (isInProgress) 0 else LocalStorage.loadTemplateForSplit(context, split.title).size
     }
     val exerciseCount = if (isInProgress) activeExerciseCount else plannedCount
+    // How long the day takes as planned; the base for "Short on time?".
+    val plan = remember(split.title, isInProgress, history) {
+        if (isInProgress || split.title == QUICK_WORKOUT_TITLE) emptyList() else planFor(split)
+    }
+    val minutes = if (plan.isEmpty()) 0 else estimateMinutes(plan)
+    var budgeting by remember { mutableStateOf(false) }
     val last = history.firstOrNull { it.splitTitle == split.title }
 
     AppCard(modifier = modifier.fillMaxWidth(), elevated = true, contentPadding = PaddingValues(0.dp)) {
@@ -216,6 +230,7 @@ private fun UpNextCard(
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Pill(if (exerciseCount == 1) tr("1 exercise") else tr("{0} exercises", exerciseCount), container = P.bgControl)
+                if (minutes > 0) Pill(tr("~{0} min", minutes), icon = Icons.Rounded.Schedule, container = P.bgControl)
                 Pill(
                     last?.let { tr("Last done {0}", relativeDay(it.id)) } ?: tr("Not done yet"),
                     container = P.bgControl
@@ -228,6 +243,26 @@ private fun UpNextCard(
                 onClick = onStart,
                 modifier = Modifier.fillMaxWidth()
             )
+            // Only worth offering when there's something to cut.
+            if (minutes > 20) {
+                Text(
+                    tr("Short on time?"),
+                    style = AppType.label,
+                    color = P.textSecondary,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .pressable { budgeting = true }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+    if (budgeting) {
+        TimeBudgetSheet(split, plan, onDismiss = { budgeting = false }) { trimmed ->
+            budgeting = false
+            onStartPlanned(trimmed)
         }
     }
 }

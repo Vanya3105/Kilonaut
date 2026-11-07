@@ -9,6 +9,11 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Swap + Short on time** (branch `swap-and-time`, not tested on the phone yet):
+- [x] Machine taken? (exercise ⋮, before any of its sets is done): three alternatives for the same muscle, same movement first (`movementOf`), fitting the equipment, ones done before first, preferably other equipment; each shows the set it would start at. Keeps the set count; "Keep it in <day>" replaces it in the day (position and target kept, `LocalStorage.replaceInSplitTemplate`); Undo.
+- [x] Short on time? (Today's Up next): "~N min" estimate (sets, rests, changeovers: `estimateSeconds`), pick 20–75 min, see what's cut (warm-ups, then isolation/later sets to 2, main lifts to 2, then whole exercises from the end, isolation first: `trimToMinutes`), start the shorter version.
+- [x] What's new for 1.0.0 beta 1 lists these, the weight widget and Do it again.
+
 **Betas until 1.0.0** (branch `beta-versioning`) is tested on the owner's phone and merged (2026-11-07): the owner wants the public release to be 1.0.0, so everything until then is a beta. Version names are `1.0.0-beta.N` (next: beta.1; phone and watch), the version code keeps going up (phone 39, watch 1_000_039). GitHub releases are published as pre-releases; v3.7.0 and v3.8.0 were marked pre-release too (2026-11-07). The update check reads the newest release including pre-releases, and counts 2.x/3.x as older than any 1.x; About, What's new and the update card show "1.0.0 beta 1".
 
 **Weight widget + Do it again** (branch `weight-widget`) is tested on the owner's phone and merged (2026-11-07):
