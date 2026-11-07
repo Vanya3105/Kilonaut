@@ -880,6 +880,7 @@ internal object HebrewText {
         m["{0}: {1}"] = "{0}: {1}"
         m["empty"] = "ריק"
         m["Plates"] = "פלטות"
+        m["Do it again"] = "לעשות שוב"
         m["Body weight widget"] = "ווידג׳ט משקל גוף"
         m["Your weight and its trend. Tap it to log a weigh-in."] = "המשקל שלכם והמגמה שלו. הקשה עליו רושמת שקילה."
         m["Tap to log your first weigh-in"] = "הקישו כדי לרשום שקילה ראשונה"

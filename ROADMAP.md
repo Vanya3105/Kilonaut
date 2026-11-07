@@ -9,6 +9,10 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Weight widget + Do it again** (branch `weight-widget`, not tested on the phone yet):
+- [x] Body-weight widget (4th widget, `BodyWeightWidgetProvider`): latest weigh-in, change since the first in 30 days, the smoothed 30-day trend; a tap opens the weigh-in sheet. Same colours/see-through/settings as the others; `WeightWidgetTest` draws it to app/build/screenshots.
+- [x] History → a workout's ⋮ → Do it again: its exercises in order, as many work sets as it had, today's suggested numbers, under its own name; through the "still going" question when a workout runs.
+
 **Fix: workout clock** (branch `fix-workout-clock`) is tested on the owner's phone and merged (2026-11-07): a workout started while the last one's screen was still up (icon shortcut, switching days, or the last one finished from the notification/watch while the app was in the background) showed the old workout's time. The workout screen is now keyed by the session's start, so each workout gets a fresh one. Also: the "still going" question and "saved" message call a quick workout "Quick workout", like everywhere else.
 
 **Small extras** (branch `small-extras`) is tested on the owner's phone and merged (2026-11-07). Version is now 3.9.0 (code 39).

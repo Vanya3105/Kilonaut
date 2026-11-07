@@ -309,6 +309,8 @@ fun GymTrackerApp(
     var celebration by remember { mutableStateOf<ShareData?>(null) }
     // Another workout asked for while one is running: what to do with the running one.
     var switchingTo by remember { mutableStateOf<WorkoutSplit?>(null) }
+    // "Do it again" waiting for the running workout to be saved or thrown away.
+    var repeatQueued by remember { mutableStateOf<CompletedWorkout?>(null) }
 
     val initialActive = remember { LocalStorage.loadActiveSession(context) }
     var activeSplit by remember {
@@ -459,6 +461,39 @@ fun GymTrackerApp(
         askForNotificationsOnce()
     }
 
+    /**
+     * A past workout again: its exercises in its order, with as many work sets as it had, at
+     * today's suggested numbers. Under its own name, so a program day still counts for the week.
+     */
+    fun startRepeat(workout: CompletedWorkout, split: WorkoutSplit) {
+        val entries = workout.exercises.filter { !it.isSkipped }.map { past ->
+            val fresh = newExerciseEntry(context, split.title, past.name, past.targetMuscle, history, settings)
+            val warmups = fresh.sets.filter { it.isWarmupSet }
+            val work = fresh.sets.filter { !it.isWarmupSet }
+            val count = past.sets.count { !it.isWarmupSet }.coerceAtLeast(1)
+            val template = work.lastOrNull() ?: SetEntry(1, weight = "", reps = "")
+            val resized = List(count) { i -> (work.getOrNull(i) ?: template).copy(isCompleted = false, rir = -1) }
+            fresh.copy(type = past.type, isSuperset = past.isSuperset, sets = (warmups + resized).mapIndexed { i, s -> s.copy(setNumber = i + 1) })
+        }
+        activeSplit = split
+        currentExercises = entries
+        workoutExpanded = true
+        LocalStorage.saveActiveSession(context, split.title, entries)
+        WorkoutReminders.dismiss(context)
+        askForNotificationsOnce()
+    }
+
+    fun repeatWorkout(workout: CompletedWorkout) {
+        haptics.confirm()
+        val split = splits.find { it.title == workout.splitTitle } ?: WorkoutSplit(workout.splitTitle, "", "")
+        if (activeSplit != null) {
+            repeatQueued = workout
+            switchingTo = split
+            return
+        }
+        startRepeat(workout, split)
+    }
+
     /** Ends the running workout (saved, or thrown away) and starts [next] in its place. */
     fun switchWorkout(next: WorkoutSplit, save: Boolean) {
         if (save) {
@@ -471,7 +506,13 @@ fun GymTrackerApp(
         }
         activeSplit = null
         currentExercises = emptyList()
-        if (next.title == QUICK_WORKOUT_TITLE) startQuickWorkout() else startWorkout(next)
+        val queued = repeatQueued
+        repeatQueued = null
+        when {
+            queued != null -> startRepeat(queued, next)
+            next.title == QUICK_WORKOUT_TITLE -> startQuickWorkout()
+            else -> startWorkout(next)
+        }
     }
 
     fun discardActiveWorkout() {
@@ -593,7 +634,8 @@ fun GymTrackerApp(
                         history = history,
                         userProfile = userProfile,
                         onOpenWorkout = { openPastWorkout(it) },
-                        onDeleteWorkout = { deletePastWorkout(it) }
+                        onDeleteWorkout = { deletePastWorkout(it) },
+                        onRepeatWorkout = { repeatWorkout(it) }
                     )
                     AppTab.PROGRESS -> ProgressScreen(
                         history = history,
@@ -986,7 +1028,7 @@ fun GymTrackerApp(
                     tickedSets = ticked,
                     onSave = { switchingTo = null; haptics.confirm(); switchWorkout(next, save = true) },
                     onDiscard = { switchingTo = null; haptics.tick(); switchWorkout(next, save = false) },
-                    onKeep = { switchingTo = null; workoutExpanded = true }
+                    onKeep = { switchingTo = null; repeatQueued = null; workoutExpanded = true }
                 )
             }
         }

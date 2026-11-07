@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.DropdownMenu
@@ -61,7 +62,8 @@ fun HistoryScreen(
     history: List<CompletedWorkout>,
     userProfile: UserProfile,
     onOpenWorkout: (CompletedWorkout) -> Unit,
-    onDeleteWorkout: (CompletedWorkout) -> Unit
+    onDeleteWorkout: (CompletedWorkout) -> Unit,
+    onRepeatWorkout: (CompletedWorkout) -> Unit = {}
 ) {
     val P = LocalPalette.current
     var mode by rememberSaveable { mutableStateOf(HistoryMode.WEEK) }
@@ -91,9 +93,12 @@ fun HistoryScreen(
             transitionSpec = { fadeIn(tween(200)).togetherWith(fadeOut(tween(120))) },
             label = "history_mode"
         ) { m ->
-            when (m) {
-                HistoryMode.WEEK -> WeekView(history, userProfile, onOpenWorkout, onDeleteWorkout, { photoToView = it })
-                HistoryMode.MONTH -> MonthView(history, onOpenWorkout, onDeleteWorkout, { photoToView = it })
+            // Every card's menu offers "Do it again"; handed down this way rather than through each list.
+            CompositionLocalProvider(LocalRepeatWorkout provides onRepeatWorkout) {
+                when (m) {
+                    HistoryMode.WEEK -> WeekView(history, userProfile, onOpenWorkout, onDeleteWorkout, { photoToView = it })
+                    HistoryMode.MONTH -> MonthView(history, onOpenWorkout, onDeleteWorkout, { photoToView = it })
+                }
             }
         }
     }
@@ -334,6 +339,9 @@ private fun LazyListScope.workoutList(
     }
 }
 
+/** Starts a past workout again; null where cards can't (no "Do it again" in the menu then). */
+val LocalRepeatWorkout = staticCompositionLocalOf<((CompletedWorkout) -> Unit)?> { null }
+
 @Composable
 fun WorkoutHistoryCard(
     workout: CompletedWorkout,
@@ -365,6 +373,13 @@ fun WorkoutHistoryCard(
             Box {
                 CircleIconButton(Icons.Rounded.MoreVert, tr("More"), { menuOpen = true }, size = 34.dp, container = Color.Transparent, tint = P.textSecondary)
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, containerColor = P.bgElevated) {
+                    LocalRepeatWorkout.current?.let { repeat ->
+                        DropdownMenuItem(
+                            text = { Text(tr("Do it again"), style = AppType.body) },
+                            leadingIcon = { Icon(Icons.Rounded.Replay, null) },
+                            onClick = { menuOpen = false; repeat(workout) }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(tr("Share"), style = AppType.body) },
                         leadingIcon = { Icon(Icons.Rounded.IosShare, null) },
