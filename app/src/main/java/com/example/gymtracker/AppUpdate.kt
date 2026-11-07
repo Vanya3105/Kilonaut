@@ -39,7 +39,9 @@ import java.net.URL
 object AppUpdate {
     class Release(val version: String, val apkUrl: String, val pageUrl: String)
 
-    private const val LATEST = "https://api.github.com/repos/Vanya3105/Kilonaut/releases/latest"
+    // Not /releases/latest: that skips pre-releases, and every release is a beta until 1.0.0.
+    // Newest first; the first that isn't a draft is the one to offer.
+    private const val RELEASES = "https://api.github.com/repos/Vanya3105/Kilonaut/releases?per_page=5"
     private const val PREFS = "gym_tracker_update_check"
     private const val KEY_CHECKED = "checked_at"
     private const val KEY_DISMISSED = "dismissed_version"
@@ -59,18 +61,39 @@ object AppUpdate {
         installer == "com.android.vending"
     } catch (_: Exception) { false }
 
-    /** "3.10.0" > "3.9.1": compared number by number. */
+    /**
+     * "3.10.0" > "3.9.1" number by number; "1.0.0-beta.2" > "1.0.0-beta.1"; "1.0.0" > any of its
+     * betas. Versions 2.x and 3.x came before the numbering restarted for the 1.0.0 betas, so they
+     * are older than any 1.x.
+     */
     internal fun isNewer(latest: String, current: String): Boolean {
-        fun parts(v: String) = v.trim().removePrefix("v").split('.', '-').map { it.toIntOrNull() ?: 0 }
-        val a = parts(latest)
-        val b = parts(current)
-        for (i in 0 until maxOf(a.size, b.size)) {
-            val x = a.getOrElse(i) { 0 }
-            val y = b.getOrElse(i) { 0 }
+        class V(val era: Int, val numbers: List<Int>, val beta: Int?)
+        fun parse(v: String): V {
+            val clean = v.trim().removePrefix("v")
+            val main = clean.substringBefore('-')
+            val numbers = main.split('.').map { it.toIntOrNull() ?: 0 }
+            val beta = if ('-' in clean) Regex("""\d+""").find(clean.substringAfter('-'))?.value?.toIntOrNull() ?: 0 else null
+            // The old numbering (2.x, 3.x) is the earlier era.
+            return V(if (numbers.first() >= 2) 0 else 1, numbers, beta)
+        }
+        val a = parse(latest)
+        val b = parse(current)
+        if (a.era != b.era) return a.era > b.era
+        for (i in 0 until maxOf(a.numbers.size, b.numbers.size)) {
+            val x = a.numbers.getOrElse(i) { 0 }
+            val y = b.numbers.getOrElse(i) { 0 }
             if (x != y) return x > y
         }
-        return false
+        // Same numbers: the release beats its betas, a later beta an earlier one.
+        return when {
+            a.beta == null -> b.beta != null
+            b.beta == null -> false
+            else -> a.beta > b.beta
+        }
     }
+
+    /** "1.0.0-beta.1" → "1.0.0 beta 1", as people read it. */
+    fun shownVersion(v: String): String = v.replace(Regex("""-beta\.?(\d*)""")) { m -> " beta" + m.groupValues[1].let { if (it.isEmpty()) "" else " $it" } }
 
     suspend fun check(context: Context, force: Boolean = false) {
         if (installedFromPlay(context)) return
@@ -82,13 +105,15 @@ object AppUpdate {
         val current = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: return
         val release = withContext(Dispatchers.IO) {
             runCatching {
-                val conn = URL(LATEST).openConnection() as HttpURLConnection
+                val conn = URL(RELEASES).openConnection() as HttpURLConnection
                 conn.connectTimeout = 8000
                 conn.readTimeout = 8000
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
                 try {
                     if (conn.responseCode != 200) return@runCatching null
-                    val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                    val list = org.json.JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
+                    val json = (0 until list.length()).map { list.getJSONObject(it) }.firstOrNull { !it.optBoolean("draft") }
+                        ?: return@runCatching null
                     val assets = json.optJSONArray("assets")
                     // The phone APK, not the watch one.
                     val apk = (0 until (assets?.length() ?: 0)).map { assets!!.getJSONObject(it) }
@@ -129,7 +154,7 @@ fun UpdateCard(modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(tr("Kilonaut {0} is out", r.version), style = AppType.bodyStrong, color = P.textPrimary)
+                    Text(tr("Kilonaut {0} is out", AppUpdate.shownVersion(r.version)), style = AppType.bodyStrong, color = P.textPrimary)
                     Text(tr("Your workouts stay as they are."), style = AppType.caption, color = P.textSecondary)
                 }
             }

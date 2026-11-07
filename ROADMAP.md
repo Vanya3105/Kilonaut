@@ -9,6 +9,8 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Betas until 1.0.0** (branch `beta-versioning`, not tested on the phone yet): the owner wants the public release to be 1.0.0, so everything until then is a beta. Version names are `1.0.0-beta.N` (next: beta.1; phone and watch), the version code keeps going up (phone 39, watch 1_000_039). GitHub releases are published as pre-releases; v3.7.0 and v3.8.0 were marked pre-release too (2026-11-07). The update check reads the newest release including pre-releases, and counts 2.x/3.x as older than any 1.x; About, What's new and the update card show "1.0.0 beta 1".
+
 **Weight widget + Do it again** (branch `weight-widget`) is tested on the owner's phone and merged (2026-11-07):
 - [x] Body-weight widget (4th widget, `BodyWeightWidgetProvider`): latest weigh-in, change since the first in 30 days, the smoothed 30-day trend; a tap opens the weigh-in sheet. Same colours/see-through/settings as the others; `WeightWidgetTest` draws it to app/build/screenshots.
 - [x] History → a workout's ⋮ → Do it again: its exercises in order, as many work sets as it had, today's suggested numbers, under its own name; through the "still going" question when a workout runs.

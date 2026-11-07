@@ -35,7 +35,7 @@ object WhatsNew {
 
     /** The highlights of [version], or none. Words through [tr] when shown, so they follow the language. */
     internal fun notesFor(version: String): List<Item> = when (version) {
-        "3.9.0" -> listOf(
+        "1.0.0-beta.1" -> listOf(
             Item(Icons.Rounded.Badge, tr("GymTracker is now Kilonaut"), tr("Same app, same data, a name of its own.")),
             Item(Icons.Rounded.NotificationsActive, tr("Reminders"), tr("A nudge on your training days and a morning weigh-in, set on a new day dial. Profile → Reminders.")),
             Item(Icons.Rounded.TouchApp, tr("Shortcuts on the app icon"), tr("Long-press Kilonaut to start your next workout or log your weight.")),
@@ -72,7 +72,7 @@ fun WhatsNewSheet(version: String, onDone: () -> Unit) {
     AppBottomSheet(onDismiss = onDone) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
             Text(tr("What's new"), style = AppType.label, color = P.accentPrimary)
-            Text("Kilonaut $version", style = AppType.display, color = P.textPrimary)
+            Text("Kilonaut ${AppUpdate.shownVersion(version)}", style = AppType.display, color = P.textPrimary)
             Spacer(Modifier.height(20.dp))
             items.forEachIndexed { i, item ->
                 Row(Modifier.padding(bottom = 16.dp).enterAnimation(i + 1), verticalAlignment = Alignment.Top) {

@@ -703,7 +703,7 @@ private fun AboutGroup() {
         }
         Spacer(Modifier.height(16.dp))
         Text("Kilonaut", style = AppType.label, color = P.textSecondary)
-        if (version.isNotEmpty()) Text(tr("Version {0}", version), style = AppType.caption, color = P.textTertiary)
+        if (version.isNotEmpty()) Text(tr("Version {0}", AppUpdate.shownVersion(version)), style = AppType.caption, color = P.textTertiary)
     }
 
     if (showLicenses) LicensesSheet(onDismiss = { showLicenses = false })

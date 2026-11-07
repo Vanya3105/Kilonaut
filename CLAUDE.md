@@ -5,6 +5,9 @@ The app is called **Kilonaut** (renamed from GymTracker on 2026-11-07). Use Kilo
 **At the start of every session, read `ROADMAP.md` and continue from its "Next up" section.**
 When the user says "continue", that is what they mean.
 
+## Versions
+Until the first public release (1.0.0, on Google Play) every release is a beta: `versionName = "1.0.0-beta.N"` in `app/` and `wear/`, published on GitHub as a pre-release. `versionCode` only ever goes up. Releases before this (2.x, 3.x) count as older than any 1.x (`AppUpdate.isNewer`). Add the release's highlights to `WhatsNew.notesFor` under its version name.
+
 ## Workflow
 - One branch per roadmap phase (`phase-N-name`); never commit to `master` directly.
 - After each step: build + tests must pass, then commit and update `ROADMAP.md` (tick boxes, rewrite "Next up") in the same commit.
