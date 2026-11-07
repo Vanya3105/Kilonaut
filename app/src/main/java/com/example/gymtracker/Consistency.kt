@@ -1,21 +1,28 @@
 package com.example.gymtracker
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 /** Training days over the last weeks, and how steady it's been. */
 data class Consistency(
@@ -29,6 +36,10 @@ data class Consistency(
 )
 
 internal const val CONSISTENCY_WEEKS = 18
+
+/** How many columns a day takes to land once the sweep reaches it. */
+private const val SWEEP_TAIL = 4f
+private val OvershootEase = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
 
 internal fun computeConsistency(history: List<CompletedWorkout>, nowMillis: Long = System.currentTimeMillis(), weeks: Int = CONSISTENCY_WEEKS): Consistency {
     fun dayStart(millis: Long) = Calendar.getInstance().apply {
@@ -75,6 +86,10 @@ internal fun computeConsistency(history: List<CompletedWorkout>, nowMillis: Long
 fun ConsistencyCard(history: List<CompletedWorkout>, modifier: Modifier = Modifier) {
     val P = LocalPalette.current
     val c = remember(history) { computeConsistency(history) }
+    // Once per launch (the tab stays composed): the trained days fill in oldest to newest and the
+    // numbers count up with them. A new workout later just appears.
+    val reveal = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(900, delayMillis = 120, easing = FastOutSlowInEasing)) }
     AppCard(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
@@ -98,12 +113,14 @@ fun ConsistencyCard(history: List<CompletedWorkout>, modifier: Modifier = Modifi
             }
         }
         Spacer(Modifier.height(14.dp))
-        TrainingCalendar(c.days)
+        TrainingCalendar(c.days) { reveal.value }
         Spacer(Modifier.height(14.dp))
         Row {
-            Stat(tr("This month"), "${c.thisMonth}", Modifier.weight(1f))
-            Stat(tr("All time"), "${c.total}", Modifier.weight(1f))
-            Stat(tr("Last {0} weeks", CONSISTENCY_WEEKS), "${c.days.sumOf { w -> w.sumOf { it.coerceAtLeast(0) } }}", Modifier.weight(1f))
+            val f = reveal.value
+            fun counted(n: Int) = "${(n * f).roundToInt()}"
+            Stat(tr("This month"), counted(c.thisMonth), Modifier.weight(1f))
+            Stat(tr("All time"), counted(c.total), Modifier.weight(1f))
+            Stat(tr("Last {0} weeks", CONSISTENCY_WEEKS), counted(c.days.sumOf { w -> w.sumOf { it.coerceAtLeast(0) } }), Modifier.weight(1f))
         }
     }
 }
@@ -117,9 +134,13 @@ private fun Stat(label: String, value: String, modifier: Modifier) {
     }
 }
 
-/** One square per day, a column per week, newest on the end side; days with a workout in the accent. */
+/**
+ * One square per day, a column per week, newest on the end side; days with a workout in the accent,
+ * popping in as [reveal] (read while drawing, so the animation only redraws) sweeps across. Today
+ * has a ring until it has a workout.
+ */
 @Composable
-private fun TrainingCalendar(days: List<List<Int>>) {
+private fun TrainingCalendar(days: List<List<Int>>, reveal: () -> Float) {
     val P = LocalPalette.current
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val trained = days.sumOf { w -> w.count { it > 0 } }
@@ -132,16 +153,33 @@ private fun TrainingCalendar(days: List<List<Int>>) {
         val gap = size.width * 0.012f
         val cell = (size.width - gap * (days.size - 1)) / days.size
         val radius = CornerRadius(cell * 0.28f)
+        val sweep = reveal() * (days.size + SWEEP_TAIL)
+        val lastCol = days.indexOfLast { w -> w.any { it >= 0 } }
+        val todayRow = days.getOrNull(lastCol)?.indexOfLast { it >= 0 } ?: -1
         days.forEachIndexed { col, week ->
             val x = (if (rtl) days.size - 1 - col else col) * (cell + gap)
             week.forEachIndexed { row, count ->
                 if (count < 0) return@forEachIndexed
-                val color = when {
-                    count == 0 -> P.bgControl
-                    count == 1 -> P.accentPrimary.copy(alpha = 0.75f)
-                    else -> P.accentPrimary
+                val y = row * (cell + gap)
+                drawRoundRect(P.bgControl, Offset(x, y), Size(cell, cell), radius)
+                if (count > 0) {
+                    val t = ((sweep - col) / SWEEP_TAIL).coerceIn(0f, 1f)
+                    if (t > 0f) {
+                        // A little overshoot as each day lands.
+                        val grow = cell * (0.4f + 0.6f * OvershootEase.transform(t))
+                        val inset = (cell - grow) / 2
+                        drawRoundRect(
+                            P.accentPrimary.copy(alpha = (if (count == 1) 0.75f else 1f) * t),
+                            Offset(x + inset, y + inset), Size(grow, grow), CornerRadius(grow * 0.28f)
+                        )
+                    }
+                } else if (col == lastCol && row == todayRow) {
+                    val w = cell * 0.09f
+                    drawRoundRect(
+                        P.accentPrimary.copy(alpha = 0.6f * reveal()),
+                        Offset(x + w / 2, y + w / 2), Size(cell - w, cell - w), CornerRadius(cell * 0.24f), style = Stroke(w)
+                    )
                 }
-                drawRoundRect(color, Offset(x, row * (cell + gap)), Size(cell, cell), radius)
             }
         }
     }

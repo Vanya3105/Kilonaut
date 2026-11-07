@@ -20,6 +20,10 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDone
@@ -166,17 +170,18 @@ fun SettingsScreen(
                 if (p.experience == null || p.goal == null) {
                     Text(tr("Answer a few questions so the app can pick exercises, sets, reps and rest for you."), style = AppType.body, color = P.textSecondary)
                 } else {
-                    Text(
-                        listOfNotNull(
-                            p.experience.label, p.goal.label,
-                            p.daysPerWeek.takeIf { it > 0 }?.let { tr("{0} days a week", it) },
-                            p.sessionMinutes.takeIf { it > 0 }?.let { tr("{0} min", it) },
-                            p.focus?.takeIf { it != Focus.BALANCED }?.let { tr("Focus: {0}", it.label) },
-                            p.equipment?.label
-                        ).joinToString(" · "),
-                        style = AppType.bodyStrong,
-                        color = P.textPrimary
-                    )
+                    // The goal as the headline, the rest as chips: one long "Some · Build muscle · …"
+                    // line wrapped mid-phrase, and "Some" meant nothing without its question.
+                    Text(p.goal.label, style = AppType.title, color = P.textPrimary)
+                    Spacer(Modifier.height(10.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (p.daysPerWeek > 0) Pill(tr("{0} days a week", p.daysPerWeek), icon = Icons.Rounded.CalendarMonth)
+                        if (p.sessionMinutes > 0) Pill(tr("{0} min", p.sessionMinutes), icon = Icons.Rounded.Schedule)
+                        p.equipment?.let { Pill(it.label, icon = Icons.Rounded.FitnessCenter) }
+                        Pill(p.experience.detail, icon = Icons.AutoMirrored.Rounded.TrendingUp)
+                        p.focus?.takeIf { it != Focus.BALANCED }?.let { Pill(tr("Focus: {0}", it.label), color = P.accentPrimary, container = P.accentSoft) }
+                    }
+                    if (p.skipMuscles.isNotEmpty() || p.limits.isNotEmpty()) Spacer(Modifier.height(8.dp))
                     if (p.skipMuscles.isNotEmpty()) {
                         Text(tr("Not training: {0}", BUILDER_MUSCLES.filter { it in p.skipMuscles }.joinToString(", ") { shown(it) }), style = AppType.caption, color = P.textSecondary)
                     }

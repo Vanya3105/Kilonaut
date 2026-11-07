@@ -1028,10 +1028,10 @@ private fun ExerciseCard(
                     ExerciseType.DISTANCE_TIME -> unit.distanceLabel to tr("Time")
                 }
                 if (first != null) {
-                    Text(first, style = AppType.caption, color = P.textTertiary, modifier = Modifier.weight(1.25f).padding(start = 12.dp))
+                    Text(first, style = AppType.caption, color = P.textTertiary, textAlign = TextAlign.Center, modifier = Modifier.weight(1.25f))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(second, style = AppType.caption, color = P.textTertiary, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                Text(second, style = AppType.caption, color = P.textTertiary, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(52.dp))
             }
 

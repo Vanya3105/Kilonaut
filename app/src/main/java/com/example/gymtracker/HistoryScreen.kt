@@ -461,7 +461,8 @@ private fun ExerciseSummary(rows: List<Triple<ExerciseEntry, SetEntry?, Boolean>
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(P.bgControl).padding(horizontal = 12.dp, vertical = 8.dp)) {
         rows.take(SUMMARY_ROWS).forEach { (ex, best, isBest) ->
             Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${ex.workSets.size} ×", style = AppType.caption.copy(fontFeatureSettings = "tnum"), color = P.textTertiary, modifier = Modifier.width(28.dp))
+                // Only warm-ups (or nothing) logged: a dash, not "0 ×".
+                Text(ex.workSets.size.let { if (it == 0) "–" else "$it ×" }, style = AppType.caption.copy(fontFeatureSettings = "tnum"), color = P.textTertiary, modifier = Modifier.width(28.dp))
                 Text(shown(ex.name), style = AppType.label, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (isBest) {
                     Icon(Icons.Rounded.EmojiEvents, tr("New best"), tint = P.warningText, modifier = Modifier.padding(end = 4.dp).size(14.dp))

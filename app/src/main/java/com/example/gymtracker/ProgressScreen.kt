@@ -93,7 +93,7 @@ fun ProgressScreen(
         } else {
             item {
                 AppCard(
-                    Modifier.fillMaxWidth().enterAnimation(0).animateContentSize(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)).tipTarget(tour, "LIFTS"),
+                    Modifier.fillMaxWidth().enterAnimation(1).animateContentSize(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)).tipTarget(tour, "LIFTS"),
                     contentPadding = PaddingValues(vertical = 6.dp)
                 ) {
                     (if (showAllLifts) bestLifts else bestLifts.take(6)).forEachIndexed { i, lift ->
@@ -136,14 +136,14 @@ fun ProgressScreen(
         }
 
         item { SectionHeader(tr("Sets per muscle")) }
-        item { WeeklySetsCard(recovery, Modifier.enterAnimation(1)) }
+        item { WeeklySetsCard(recovery, Modifier.enterAnimation(2)) }
 
         item {
             BodyWeightCard(
                 current = userProfile.currentWeightKg,
                 weightHistory = weightHistory,
                 onLog = { haptics.tick(); showLogSheet = true },
-                modifier = Modifier.enterAnimation(2)
+                modifier = Modifier.enterAnimation(3)
             )
         }
 

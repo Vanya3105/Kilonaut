@@ -1242,15 +1242,17 @@ private fun BottomNavBar(selected: AppTab, onSelect: (AppTab) -> Unit) {
     }
 }
 
+/**
+ * Solid behind the clock (see-through, scrolled text showed between the icons), then a short fade
+ * so content slides under it softly instead of being cut along a line.
+ */
 @Composable
 fun StatusBarScrim() {
     val P = LocalPalette.current
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .windowInsetsTopHeight(WindowInsets.statusBars)
-            .background(Brush.verticalGradient(listOf(P.bgPrimary, P.bgPrimary.copy(alpha = 0.88f))))
-    )
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(P.bgPrimary))
+        Box(Modifier.fillMaxWidth().height(12.dp).background(Brush.verticalGradient(listOf(P.bgPrimary, P.bgPrimary.copy(alpha = 0f)))))
+    }
 }
 
 @Composable

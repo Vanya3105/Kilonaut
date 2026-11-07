@@ -192,6 +192,11 @@ fun SetValueBox(ref: FieldRef, set: SetEntry, type: ExerciseType, modifier: Modi
     val text = if (editing) shownText(editor.text, ref.field) else fieldText(set, ref.field, type)
     val shape = RoundedCornerShape(12.dp)
     val border by animateColorAsState(if (editing) P.accentPrimary else Color.Transparent, tween(150), label = "value_border")
+    // A done set's numbers sit straight on its green row: grey boxes on green looked muddy.
+    val fill by animateColorAsState(
+        when { editing -> P.bgElevated; set.isCompleted -> Color.Transparent; else -> P.bgControl },
+        tween(250), label = "value_fill"
+    )
     val bring = remember { BringIntoViewRequester() }
     // Keep the box above the keypad once it has slid up.
     if (editing) LaunchedEffect(ref) { delay(260); bring.bringIntoView() }
@@ -200,7 +205,7 @@ fun SetValueBox(ref: FieldRef, set: SetEntry, type: ExerciseType, modifier: Modi
             .height(40.dp)
             .bringIntoViewRequester(bring)
             .clip(shape)
-            .background(if (editing) P.bgElevated else P.bgControl)
+            .background(fill)
             .border(1.5.dp, border, shape)
             .pressable(pressedScale = 0.95f) { editor?.open(ref, set, type) }
             // A screen reader would otherwise read a bare "20": say which value it is, with its unit.
