@@ -268,6 +268,8 @@ private fun MonthView(
                                         selected -> P.onAccentPrimary
                                         trained -> P.accentPrimary
                                         isToday -> P.textPrimary
+                                        // Days to come recede, so today stands out in the month.
+                                        key > todayKey -> P.textTertiary
                                         else -> P.textSecondary
                                     }
                                 )

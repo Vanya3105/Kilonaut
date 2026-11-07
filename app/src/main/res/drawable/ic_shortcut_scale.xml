@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher shortcut: the brand orange glyph on a soft circle, as Android draws shortcut icons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:fillColor="#FFFDEEE7"
+        android:pathData="M16,0a16,16 0,1 1,0 32a16,16 0,1 1,0 -32z" />
+    <!-- A bathroom scale: rounded body, dial with a needle. -->
+    <path
+        android:fillColor="#FFE5501B"
+        android:fillType="evenOdd"
+        android:pathData="M11,8h10a3,3 0,0 1,3 3v10a3,3 0,0 1,-3 3h-10a3,3 0,0 1,-3 -3v-10a3,3 0,0 1,3 -3zM11,10a1,1 0,0 0,-1 1v10a1,1 0,0 0,1 1h10a1,1 0,0 0,1 -1v-10a1,1 0,0 0,-1 -1z" />
+    <path
+        android:fillColor="#FFE5501B"
+        android:pathData="M12,15.5a4,4 0,0 1,8 0zM15.4,15.5l1.6,-3.2 0.6,0.3 -1.2,2.9z" />
+</vector>

@@ -43,6 +43,14 @@ class WeightChartTest {
     }
 
     @Test
+    fun sameDay_keepsTheLastWeighIn() {
+        val morning = WeightLogEntry(now, "2027-01-15", "", 80f)
+        val retry = WeightLogEntry(now + 60_000, "2027-01-15", "", 80.4f)
+        val before = WeightLogEntry(now - day, "2027-01-14", "", 81f)
+        assertEquals(listOf(81f, 80.4f), dailyWeighIns(listOf(retry, morning, before)).sortedBy { it.id }.map { it.weightKg })
+    }
+
+    @Test
     fun axis_roundStepsAroundTheData() {
         val (lo, hi, step) = niceAxis(81.3f, 86.6f)
         assertEquals(2f, step)

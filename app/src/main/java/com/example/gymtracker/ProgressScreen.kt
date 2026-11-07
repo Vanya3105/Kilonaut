@@ -44,7 +44,9 @@ fun ProgressScreen(
     onLogWeight: (Float) -> Unit,
     onDeleteWeight: (Long) -> Unit,
     onOpenExercise: (String) -> Unit,
-    onMergeExercises: (from: String, into: String) -> Unit
+    onMergeExercises: (from: String, into: String) -> Unit,
+    /** Goes up by one for each "Log body weight" shortcut: opens the weigh-in sheet. */
+    logWeightRequest: Int = 0
 ) {
     val P = LocalPalette.current
     val context = LocalContext.current
@@ -54,6 +56,7 @@ fun ProgressScreen(
     }
     var merging by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showLogSheet by remember { mutableStateOf(false) }
+    LaunchedEffect(logWeightRequest) { if (logWeightRequest > 0) showLogSheet = true }
     var showAllWeighIns by rememberSaveable { mutableStateOf(false) }
     var showAllLifts by rememberSaveable { mutableStateOf(false) }
     val recovery = remember(history) { computeMuscleRecoveryStatus(history) }
@@ -245,12 +248,13 @@ private fun computeBestLifts(history: List<CompletedWorkout>): List<BestLift> {
 internal fun BodyWeightCard(current: Float, weightHistory: List<WeightLogEntry>, haptics: Haptics, onLog: () -> Unit, modifier: Modifier = Modifier) {
     val P = LocalPalette.current
     val now = remember(weightHistory) { System.currentTimeMillis() }
-    val ranges = remember(weightHistory, now) { usefulWeightRanges(weightHistory, now) }
+    val daily = remember(weightHistory) { dailyWeighIns(weightHistory) }
+    val ranges = remember(daily, now) { usefulWeightRanges(daily, now) }
     var rangeKey by rememberSaveable { mutableStateOf(WeightRange.QUARTER.name) }
     // The chosen range if it's offered, else three months, else the longest there is.
     val range = ranges.firstOrNull { it.name == rangeKey }
         ?: ranges.firstOrNull { it == WeightRange.QUARTER } ?: ranges.lastOrNull() ?: WeightRange.ALL
-    val shown = remember(weightHistory, range, now) { weighInsIn(range, weightHistory, now) }
+    val shown = remember(daily, range, now) { weighInsIn(range, daily, now) }
     var picked by remember(shown) { mutableStateOf<Int?>(null) }
     val pickedEntry = picked?.let { shown.getOrNull(it) }
 
@@ -360,7 +364,8 @@ private fun WeighInRow(entry: WeightLogEntry, prev: WeightLogEntry?, onDelete: (
     Row(Modifier.background(P.bgCard).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(formatWeightKg(entry.weightKg), style = AppType.number, color = P.textPrimary)
-            Text(DateUtils.shortDayYearOf(entry.displayDate, entry.id), style = AppType.caption, color = P.textSecondary)
+            // With the time: two weigh-ins on one day otherwise read the same.
+            Text(DateUtils.dateTimeOf(entry.displayDate, entry.id), style = AppType.caption, color = P.textSecondary)
         }
         if (diff != null && diff != 0f) {
             Text(

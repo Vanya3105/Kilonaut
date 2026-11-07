@@ -73,8 +73,10 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
@@ -113,7 +115,14 @@ class MainActivity : ComponentActivity() {
         // Exercise photos were downloaded here before the drawn figures replaced them (2026-10-31).
         Thread { java.io.File(noBackupFilesDir, "exercise_photos").deleteRecursively() }.start()
         enableEdgeToEdge()
+        // Not again when Android recreates the activity: the shortcut was already handled.
+        if (savedInstanceState == null) AppShortcuts.take(intent)
         setContent { GymTrackerRoot(activity = this) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        AppShortcuts.take(intent)
     }
 }
 
@@ -136,6 +145,8 @@ fun GymTrackerRoot(activity: Activity) {
         removeOldAlertChannels(context)
         CrashReports.apply(context)
         AppUpdate.check(context)
+        // Alarms don't survive the app being force-stopped or updated from Android Studio.
+        WorkoutReminders.schedule(context)
     }
 
     var settings by remember { mutableStateOf(LocalStorage.loadSettings(context)) }
@@ -158,8 +169,12 @@ fun GymTrackerRoot(activity: Activity) {
                 settings = settings,
                 haptics = haptics,
                 onUpdateSettings = { newSettings ->
+                    val old = settings
                     settings = newSettings
                     LocalStorage.saveSettings(context, newSettings)
+                    if (newSettings.reminderDays != old.reminderDays || newSettings.reminderMinutes != old.reminderMinutes) {
+                        WorkoutReminders.schedule(context)
+                    }
                     haptics.tick()
                 }
             )
@@ -418,6 +433,7 @@ fun GymTrackerApp(
         activeSplit = split
         currentExercises = entries
         workoutExpanded = true
+        WorkoutReminders.dismiss(context)
         LocalStorage.saveActiveSession(context, split.title, entries)
         askForNotificationsOnce()
     }
@@ -522,6 +538,31 @@ fun GymTrackerApp(
         }
     }
 
+    // Long-press shortcuts on the app icon follow the program and the running workout.
+    val upNext = remember(history, userProfile.splitProgram) { computeWeekSummary(history, 0, userProfile.splitProgram).recommendedSplit }
+    LaunchedEffect(upNext, activeSplit?.title) {
+        withContext(Dispatchers.Default) { AppShortcuts.update(context, upNext.takeIf { it.isNotBlank() }, activeSplit?.title) }
+    }
+    var logWeightRequest by remember { mutableIntStateOf(0) }
+    val shortcut = AppShortcuts.pending
+    LaunchedEffect(shortcut, showOnboarding) {
+        if (shortcut == null || showOnboarding) return@LaunchedEffect
+        AppShortcuts.pending = null
+        when (shortcut) {
+            AppShortcuts.START_NEXT -> {
+                val running = activeSplit
+                if (running != null) workoutExpanded = true
+                else (splits.find { it.title == upNext } ?: splits.firstOrNull())?.let { startWorkout(it) }
+            }
+            AppShortcuts.EMPTY_WORKOUT -> startQuickWorkout()
+            AppShortcuts.LOG_WEIGHT -> {
+                workoutExpanded = false
+                selectedTab = AppTab.PROGRESS
+                logWeightRequest++
+            }
+        }
+    }
+
     // What the tab bar (and the Resume bar) take at the bottom, so messages sit just above them.
     var rootHeight by remember { mutableIntStateOf(0) }
     var tabsHeight by remember { mutableIntStateOf(0) }
@@ -558,6 +599,7 @@ fun GymTrackerApp(
                             userProfile = LocalStorage.loadUserProfile(context)
                         },
                         onDeleteWeight = { id -> deleteWeighIn(id) },
+                        logWeightRequest = logWeightRequest,
                         onOpenExercise = { haptics.tick(); openExercise = it },
                         onMergeExercises = { from, into -> mergeExercises(from, into) }
                     )

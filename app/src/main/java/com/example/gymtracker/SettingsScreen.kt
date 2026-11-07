@@ -1,5 +1,13 @@
 package com.example.gymtracker
 
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
+import androidx.core.content.ContextCompat
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
+import java.util.Calendar
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.text.format.DateUtils as AndroidDateUtils
@@ -280,6 +288,8 @@ fun SettingsScreen(
             }
         }
 
+        item { RemindersGroup(settings, userProfile.daysPerWeek, onUpdateSettings) }
+
         item { HealthConnectGroup(onImported = onDataRestored) }
 
         item {
@@ -407,6 +417,92 @@ fun SettingsScreen(
         )
     }
 
+}
+
+/** Days that suit [perWeek] workouts, spread out: Mon/Wed/Fri for three. */
+internal fun defaultReminderDays(perWeek: Int): Set<Int> = when (perWeek) {
+    1 -> setOf(Calendar.MONDAY)
+    2 -> setOf(Calendar.MONDAY, Calendar.THURSDAY)
+    4 -> setOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.THURSDAY, Calendar.FRIDAY)
+    5 -> (Calendar.MONDAY..Calendar.FRIDAY).toSet()
+    6 -> (Calendar.MONDAY..Calendar.SATURDAY).toSet()
+    7 -> (Calendar.SUNDAY..Calendar.SATURDAY).toSet()
+    else -> setOf(Calendar.MONDAY, Calendar.WEDNESDAY, Calendar.FRIDAY)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RemindersGroup(settings: AppSettings, perWeek: Int, onUpdateSettings: (AppSettings) -> Unit) {
+    val P = LocalPalette.current
+    val context = LocalContext.current
+    val on = settings.reminderDays.isNotEmpty()
+    var picking by remember { mutableStateOf(false) }
+    val is24 = android.text.format.DateFormat.is24HourFormat(context)
+    val time = remember(settings.reminderMinutes, is24) {
+        val cal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, settings.reminderMinutes / 60); set(Calendar.MINUTE, settings.reminderMinutes % 60) }
+        java.text.SimpleDateFormat(if (is24) "HH:mm" else "h:mm a", java.util.Locale.getDefault()).format(cal.time)
+    }
+    // Reminders are notifications: on Android 13+ they need the permission, asked when turned on.
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    SettingsGroup(tr("Reminders")) {
+        ToggleRow(
+            tr("Workout reminders"),
+            if (on) tr("On your training days at {0}", time) else tr("A nudge on the days you train"),
+            on
+        ) { turnOn ->
+            onUpdateSettings(settings.copy(reminderDays = if (turnOn) defaultReminderDays(perWeek) else emptySet()))
+            if (turnOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        AnimatedVisibility(on, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Column {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    weekdayLetters().forEachIndexed { i, letter ->
+                        val day = i + 1 // Calendar.SUNDAY == 1
+                        val picked = day in settings.reminderDays
+                        val bg by animateColorAsState(if (picked) P.accentPrimary else P.bgControl, label = "reminder_day")
+                        Box(
+                            Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(bg)
+                                .pressable(pressedScale = 0.9f, role = Role.Checkbox) {
+                                    val days = if (picked) settings.reminderDays - day else settings.reminderDays + day
+                                    onUpdateSettings(settings.copy(reminderDays = days))
+                                }
+                                .semantics { this.selected = picked },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(letter, style = AppType.label, color = if (picked) P.onAccentPrimary else P.textSecondary)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).pressable(pressedScale = 0.99f) { picking = true }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(tr("Time"), style = AppType.body, color = P.textPrimary, modifier = Modifier.weight(1f))
+                    Text(time, style = AppType.label, color = P.textPrimary, modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(P.bgControl).padding(horizontal = 14.dp, vertical = 8.dp))
+                }
+                Text(tr("Not on days you've already trained, or while a workout is going."), style = AppType.caption, color = P.textTertiary)
+            }
+        }
+    }
+    if (picking) {
+        val state = rememberTimePickerState(settings.reminderMinutes / 60, settings.reminderMinutes % 60, is24)
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            containerColor = P.bgElevated,
+            confirmButton = {
+                TextButton({ picking = false; onUpdateSettings(settings.copy(reminderMinutes = state.hour * 60 + state.minute)) }) { Text(tr("Done"), color = P.accentPrimary) }
+            },
+            dismissButton = { TextButton({ picking = false }) { Text(tr("Cancel"), color = P.textSecondary) } },
+            text = { TimePicker(state) }
+        )
+    }
 }
 
 @Composable

@@ -43,7 +43,11 @@ data class AppSettings(
     val weightUnit: WeightUnit = WeightUnit.KG,
     val restTimerSeconds: Int = 90,
     val keepScreenAwake: Boolean = true,
-    val restSoundEnabled: Boolean = true
+    val restSoundEnabled: Boolean = true,
+    /** Workout reminder days (Calendar.SUNDAY…); none = reminders off. */
+    val reminderDays: Set<Int> = emptySet(),
+    /** Reminder time, minutes after midnight. */
+    val reminderMinutes: Int = 18 * 60
 )
 
 /**

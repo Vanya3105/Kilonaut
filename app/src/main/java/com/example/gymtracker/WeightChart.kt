@@ -58,6 +58,13 @@ enum class WeightRange(val days: Int?) {
 
 private const val DAY_MS = 24 * 60 * 60 * 1000L
 
+/**
+ * One weigh-in per day, the day's last: several on one day (a retry, a correction) stacked into a
+ * vertical spike on the chart.
+ */
+internal fun dailyWeighIns(history: List<WeightLogEntry>): List<WeightLogEntry> =
+    history.groupBy { it.dateKey.ifBlank { DateUtils.formatDayKey(Date(it.id)) } }.values.map { day -> day.maxBy { it.id } }
+
 /** Weigh-ins in [range], oldest first. */
 internal fun weighInsIn(range: WeightRange, history: List<WeightLogEntry>, nowMillis: Long): List<WeightLogEntry> {
     val start = range.startMillis(nowMillis)

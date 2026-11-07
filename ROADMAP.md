@@ -9,6 +9,12 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Polish 4** (branch `polish-4`, on top of master, not tested on the phone yet):
+- [x] Body-weight chart: one weigh-in per day (several on a day made a vertical spike); weigh-ins list shows the time. History month: days to come recede.
+- [x] App shortcuts (long-press the icon): Start the next day / Resume the running one, Empty workout, Log body weight (`AppShortcuts`; the activity hands the action to the app).
+- [x] Workout reminders (Profile → Reminders): pick days and a time; "Time for Push" with Start, not on a day already trained or during a workout. Exact alarm when allowed; set again after restarts, updates and clock changes (`WorkoutReminders`, `ReminderReceiver`).
+- Owner to test, then release 3.9.0.
+
 **Polish 3 + watch** (branch `polish-3`) is tested on the owner's phone and merged (2026-11-07). Not released yet: next is 3.9.0: widgets 2 and the app review are tested and merged (2026-11-07).
 - [x] Sideways motion follows the reading direction (Hebrew): pages, History weeks and months, onboarding, split builder, tips, swipes; pages slide back out.
 - [x] Status bar icons stay dark on light pages after the splash; the status bar backdrop is solid with a soft fade.
