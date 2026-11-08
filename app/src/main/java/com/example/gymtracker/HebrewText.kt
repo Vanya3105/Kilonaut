@@ -9,7 +9,7 @@ package com.example.gymtracker
  */
 internal object HebrewText {
     private val ui: Map<String, String> by lazy {
-        HashMap<String, String>(1646).apply { ui1(this); ui2(this); ui3(this); ui4(this) }
+        HashMap<String, String>(1646).apply { ui1(this); ui2(this); ui3(this); ui4(this); ui5(this) }
     }
     private val names: Map<String, String> by lazy {
         HashMap<String, String>(858).apply { names1(this); names2(this) }
@@ -1523,5 +1523,47 @@ internal object HebrewText {
         m["{0} replaces {1} on {2}"] = "{0} מחליף את {1} ב־{2}"
         m["{0} reps on the all-out set of {1}; your rating of the set before pointed to about {2}."] = "{0} חזרות בסט המלא של {1}; הדירוג שלכם לסט שלפניו הצביע על כ־{2}."
         m["{0}: {1} sets on {2}"] = "{0}: {1} סטים ב־{2}"
+    }
+
+    /** The account: sign-in with Google or email. */
+    private fun ui5(m: HashMap<String, String>) {
+        m["Account"] = "חשבון"
+        m["Account created. Check your inbox to confirm your email."] = "החשבון נוצר. בדקו את תיבת הדואר כדי לאשר את האימייל."
+        m["At least 6 characters"] = "לפחות 6 תווים"
+        m["Continue with Google"] = "המשך עם Google"
+        m["Couldn't open Google sign-in"] = "לא הצלחנו לפתוח את הכניסה עם Google"
+        m["Couldn't sign in with Google"] = "לא הצלחנו להיכנס עם Google"
+        m["Create account"] = "יצירת חשבון"
+        m["Create an account"] = "יצירת חשבון"
+        m["Email"] = "אימייל"
+        m["Email account"] = "חשבון אימייל"
+        m["Forgot password?"] = "שכחתם סיסמה?"
+        m["Google account"] = "חשבון Google"
+        m["Hide password"] = "הסתרת הסיסמה"
+        m["I've confirmed"] = "אישרתי"
+        m["If there's an account for {0}, a reset link is on its way."] = "אם יש חשבון עבור {0}, קישור לאיפוס בדרך."
+        m["New account"] = "חשבון חדש"
+        m["No Google account on this phone. Add one in Android's settings, or use email."] = "אין חשבון Google בטלפון הזה. הוסיפו אחד בהגדרות של Android, או השתמשו באימייל."
+        m["Not confirmed yet. Check your spam folder too."] = "עדיין לא אושר. בדקו גם בתיקיית הספאם."
+        m["One moment…"] = "רגע אחד…"
+        m["Open the link we sent to {0} to confirm it's yours."] = "פתחו את הקישור ששלחנו ל־{0} כדי לאשר שהוא שלכם."
+        m["Password"] = "סיסמה"
+        m["Send again"] = "שליחה חוזרת"
+        m["Sent. Check your inbox."] = "נשלח. בדקו את תיבת הדואר."
+        m["Show password"] = "הצגת הסיסמה"
+        m["Sign in"] = "כניסה"
+        m["Sign in to keep your training in your account, so it follows you to a new phone. Without one, everything stays on this phone."] = "היכנסו כדי לשמור את האימונים בחשבון שלכם, כך שהם יעברו איתכם לטלפון חדש. בלי חשבון, הכול נשאר בטלפון הזה."
+        m["Sign in with email"] = "כניסה עם אימייל"
+        m["Sign out?"] = "לצאת מהחשבון?"
+        m["Signed in"] = "נכנסתם לחשבון"
+        m["Something went wrong. Try again."] = "משהו השתבש. נסו שוב."
+        m["That email address doesn't look right."] = "כתובת האימייל לא נראית תקינה."
+        m["There's already an account with this email. Sign in instead."] = "כבר יש חשבון עם האימייל הזה. היכנסו אליו במקום."
+        m["Too many tries. Wait a few minutes and try again."] = "יותר מדי ניסיונות. חכו כמה דקות ונסו שוב."
+        m["Type your email first, then tap this again."] = "הקלידו קודם את האימייל, ואז הקישו כאן שוב."
+        m["Use a password of at least 6 characters."] = "השתמשו בסיסמה של 6 תווים לפחות."
+        m["Use email"] = "שימוש באימייל"
+        m["Wrong email or password."] = "אימייל או סיסמה שגויים."
+        m["Your training stays on this phone."] = "האימונים שלכם נשארים בטלפון הזה."
     }
 }

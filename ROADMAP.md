@@ -9,7 +9,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**Accounts + cloud sync** (branch `accounts-sync`, owner chose Firebase on 2026-11-08). **No release until it's done.** Step 1 is the owner's (Firebase console); code starts at step 2. Plan and steps are in the "Accounts + cloud sync" section below.
+**Accounts + cloud sync** (owner chose Firebase on 2026-11-08). **No release until it's done.** Plan and steps in the "Accounts + cloud sync" section below. Steps 1–2 done (sign-in on branch `accounts-signin`, on top of `coaching-v3`), **not yet tested on the phone**. Next: step 3, upload and download.
 
 **Coach across weeks** (branch `coaching-v3`, on top of `accounts-sync`; owner chose to do these while the Firebase setup waits, 2026-11-08). Built, unit-tested, **not yet tested on the phone**. A "Coach" card on Today shows one thing at a time (`coachTip` in `Coach.kt`, `CoachCard.kt`); state is in SharedPreferences (`CoachState`, this phone only, not in backups yet: add it to sync/backup in accounts step 3).
 - [x] Lighter weeks: offered after 6 hard weeks (2+ workouts each) in a row, or 4 when 2+ main lifts stall. Start → for 7 days new workouts get half the work sets and ~10% less weight, weight advice off (`lighterWeekVersion`); "End it now"; "Not now" waits a week. Coaching ignores lighter-week workouts afterwards (`outsideLighterWeeks`).
@@ -101,8 +101,8 @@ People can create an account and their data is kept in the cloud, so it follows 
 - Sign-out: the data stays on the phone; syncing stops.
 
 **Steps**
-- [ ] 1. Owner: Firebase project and `app/google-services.json` (this also turns on Crashlytics). Switch on Authentication (Google + Email/Password) and Firestore (production mode, a region near the owner); add the debug and release SHA-1 fingerprints.
-- [ ] 2. Sign-in: Firebase Auth with Google (Credential Manager) and email + password (verify email, reset password). Profile → Account: signed in as …, sign out. Without `google-services.json` the account row is hidden, so the build still works.
+- [x] 1. Owner (2026-11-08): Firebase added to the existing Google Cloud project `gymtracker-513213` (the Drive backup one: a new project clashed with its Android OAuth client). Debug and release SHA-1 added, Google + Email/Password on, Firestore created (production mode). `app/google-services.json` is git-ignored; the owner keeps a copy. Crashlytics is on from now.
+- [x] 2. Sign-in (`Account.kt`, `AccountSection.kt`): Profile → Account, Continue with Google (Credential Manager, `GetSignInWithGoogleOption`) or email + password in a sheet (sign in / new account, verification email, "I've confirmed", send again, forgot password). Signed in: name and email, Sign out (keeps everything on the phone). Hidden when the build has no Firebase. `firebase-auth` is pinned to 24.0.1: the BOM's 25.x is built with Kotlin 2.4, newer than the project's 2.2 compiler reads (bump it when Kotlin is updated).
 - [ ] 3. Upload and download: Firestore layout above, security rules in the repo (`firestore.rules`), dirty tracking in `LocalStorage`, a WorkManager sync job; "Last synced …" on the Account page. Tests: merge rules (Robolectric, no network).
 - [ ] 4. Two phones and first sign-in: merge on first sign-in, tombstones, a running workout never syncs until it's finished. Test on the emulator with two accounts.
 - [ ] 5. Delete account (Play requires it): deletes the cloud data and the account, keeps or deletes the phone's data (asks). A web page for deletion requests (Play asks for a link) and a privacy policy update.

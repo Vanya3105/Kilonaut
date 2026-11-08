@@ -171,6 +171,10 @@ fun SettingsScreen(
             Text(tr("Profile"), style = AppType.display, color = P.textPrimary, modifier = Modifier.statusBarsPadding().padding(top = 20.dp))
         }
 
+        if (Account.available(context)) item {
+            SettingsGroup(tr("Account")) { AccountSection() }
+        }
+
         item {
             SettingsGroup(tr("Your training")) {
                 val p = userProfile

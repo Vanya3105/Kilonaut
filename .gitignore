@@ -18,3 +18,6 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+
+# Firebase config (public repo; the security rules protect the data, but keep it out anyway)
+app/google-services.json

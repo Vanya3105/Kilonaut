@@ -7,8 +7,9 @@ plugins {
     alias(libs.plugins.androidx.room)
 }
 
-// Crash reports (Firebase Crashlytics) switch on once the Firebase project's google-services.json
-// is in app/; without it the app builds and runs as before, sending nothing.
+// Crash reports (Firebase Crashlytics) and accounts switch on once the Firebase project's
+// google-services.json is in app/ (git-ignored); without it the app builds and runs as before,
+// sending nothing, and Profile has no Account section.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
     apply(plugin = "com.google.firebase.crashlytics")
@@ -105,6 +106,11 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
+    // The BOM's 25.x needs Kotlin 2.4; keep the last one this compiler reads.
+    implementation(libs.firebase.auth) { version { strictly(libs.versions.firebaseAuth.get()) } }
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
     implementation(project(":watchlink"))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
