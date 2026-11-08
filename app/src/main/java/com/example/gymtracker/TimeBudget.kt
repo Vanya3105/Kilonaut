@@ -124,11 +124,14 @@ fun TimeBudgetSheet(split: WorkoutSplit, plan: List<ExerciseEntry>, onDismiss: (
                         style = AppType.bodyStrong, color = P.textPrimary
                     )
                     Spacer(Modifier.height(8.dp))
-                    if (changes.isEmpty()) Text(tr("Nothing to cut."), style = AppType.caption, color = P.textSecondary)
-                    changes.forEach { c ->
+                    // Every exercise of the day, in order: listing only the changed ones made a longer
+                    // session look like it had fewer exercises than a shorter one.
+                    val byName = changes.associateBy { exerciseKey(it.name) }
+                    plan.filter { !it.isSkipped }.forEach { ex ->
+                        val c = byName[exerciseKey(ex.name)]
                         Row(Modifier.padding(vertical = 3.dp)) {
                             Text(
-                                shown(c.name), style = AppType.body.copy(textDecoration = if (c is Cut.Dropped) TextDecoration.LineThrough else null),
+                                shown(ex.name), style = AppType.body.copy(textDecoration = if (c is Cut.Dropped) TextDecoration.LineThrough else null),
                                 color = if (c is Cut.Dropped) P.textTertiary else P.textPrimary, modifier = Modifier.weight(1f)
                             )
                             Text(
@@ -136,8 +139,9 @@ fun TimeBudgetSheet(split: WorkoutSplit, plan: List<ExerciseEntry>, onDismiss: (
                                     is Cut.Dropped -> tr("left out")
                                     is Cut.FewerSets -> tr("{0} → {1} sets", c.from, c.to)
                                     is Cut.NoWarmups -> tr("fewer warm-ups")
+                                    null -> ex.sets.count { !it.isWarmupSet }.let { n -> if (n == 1) tr("1 set") else tr("{0} sets", n) }
                                 },
-                                style = AppType.caption, color = P.textSecondary
+                                style = AppType.caption, color = if (c == null) P.textTertiary else P.textSecondary
                             )
                         }
                     }

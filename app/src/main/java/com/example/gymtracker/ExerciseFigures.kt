@@ -59,13 +59,9 @@ private val HAIR_WHITE = Color(0xFFE4E2DE)
 
 /**
  * How the person in a figure looks. The exercise pictures all use the default; the setup pictures
- * follow the answers (age, goal), so the figure becomes the user.
+ * follow the user's age.
  */
 data class FigureLook(
-    /** Build: about −0.3 slim, 0 average, 1 very muscular (wider shoulders, chest, arms and thighs). */
-    val muscle: Float = 0f,
-    /** The middle against the average: under 1 lean, over 1 a lifter's thick trunk. */
-    val waist: Float = 1f,
     /** Height against an adult's: a young teenager is smaller, with a larger head for their size. */
     val height: Float = 1f,
     /** Hair from dark (0) to white (1); only drawn when [hair]. */
@@ -383,15 +379,6 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         }
         return
     }
-    val m = look.muscle
-    // Muscle widens most where it shows: upper arms, shoulders and chest, then thighs; hands and feet stay.
-    val armRoot = 1f + 0.75f * m
-    val armMid = 1f + 0.5f * m
-    val armEnd = 1f + 0.2f * m
-    val legRoot = 1f + 0.4f * m
-    val legMid = 1f + 0.28f * m
-    val chest = 1f + 0.5f * m
-    val middle = look.waist * (1f + 0.12f * m)
     val head = HEAD * look.headScale
     fun seg(a: Offset, z: Offset, width: Float, color: Color) =
         drawLine(color, k.px(a), k.px(z), width * k.scale, StrokeCap.Round)
@@ -455,20 +442,20 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         // A thin gap in the background colour round the arm, so an arm across the body (same
         // grey) still reads as an arm. Not at the shoulder, where it joins the body.
         if (!far) {
-            taper(lerp(l.root, l.joint, 0.4f), l.joint, 6.2f * armRoot + 2.4f, 5.4f * armMid + 2.4f, c.background)
-            taper(l.joint, l.end, 5.4f * armMid + 2.4f, 3.8f * armEnd + 2.4f, c.background)
+            taper(lerp(l.root, l.joint, 0.4f), l.joint, 6.2f + 2.4f, 5.4f + 2.4f, c.background)
+            taper(l.joint, l.end, 5.4f + 2.4f, 3.8f + 2.4f, c.background)
             dot(l.end, 2.9f + 1.2f, c.background)
         }
-        taper(l.root, l.joint, 7f * armRoot, 5.4f * armMid, base)
-        taper(l.joint, l.end, 5.4f * armMid, 3.8f * armEnd, base)
-        heat(base, "Shoulders", dim)?.let { seg(l.root, lerp(l.root, l.joint, 0.3f), 6.2f * armRoot, it) }
+        taper(l.root, l.joint, 7f, 5.4f, base)
+        taper(l.joint, l.end, 5.4f, 3.8f, base)
+        heat(base, "Shoulders", dim)?.let { seg(l.root, lerp(l.root, l.joint, 0.3f), 6.2f, it) }
         if (front) {
-            muscle(l.root, l.joint, 6.2f * armRoot, 0f, 0.3f, 0.9f, heat(base, "Biceps", false) ?: heat(base, "Triceps", false))
+            muscle(l.root, l.joint, 6.2f, 0f, 0.3f, 0.9f, heat(base, "Biceps", false) ?: heat(base, "Triceps", false))
         } else {
-            muscle(l.root, l.joint, 6.2f * armRoot, 1f, 0.3f, 0.9f, heat(base, "Biceps", dim))
-            muscle(l.root, l.joint, 6.2f * armRoot, -1f, 0.3f, 0.9f, heat(base, "Triceps", dim))
+            muscle(l.root, l.joint, 6.2f, 1f, 0.3f, 0.9f, heat(base, "Biceps", dim))
+            muscle(l.root, l.joint, 6.2f, -1f, 0.3f, 0.9f, heat(base, "Triceps", dim))
         }
-        heat(base, "Forearms", dim)?.let { taper(lerp(l.joint, l.end, 0.12f), lerp(l.joint, l.end, 0.75f), 3.6f * armEnd, 2.6f * armEnd, it) }
+        heat(base, "Forearms", dim)?.let { taper(lerp(l.joint, l.end, 0.12f), lerp(l.joint, l.end, 0.75f), 3.6f, 2.6f, it) }
         dot(l.end, 2.9f, base)
     }
 
@@ -477,8 +464,8 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         val dim = far && !front
         if (front) taper(l.end - dir(toe) * 1f, l.end + dir(toe) * 3.5f, 4f, 3.4f, base)
         else taper(l.end - dir(toe) * 2f, l.end + dir(toe) * 6.2f, 4.4f, 3.2f, base)
-        taper(l.joint, l.end, 6.6f * legMid, 4.2f, base)
-        taper(l.root, l.joint, 9.6f * legRoot, 6.8f * legMid, base)
+        taper(l.joint, l.end, 6.6f, 4.2f, base)
+        taper(l.root, l.joint, 9.6f, 6.8f, base)
         if (front) {
             muscle(l.root, l.joint, 8.6f, 0f, 0f, 0.3f, heat(base, "Glutes", false))
             muscle(l.root, l.joint, 8.6f, 0f, 0.15f, 0.88f, heat(base, "Quads", false) ?: heat(base, "Hamstrings", false))
@@ -561,7 +548,7 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
     val tTop = b.shoulder - b.up * (if (front) 3f else 2.5f)
     if (front) {
         val across = Offset(b.up.y, -b.up.x)
-        taper(tHip, tTop, 14f * middle, 17f * chest, c.near)
+        taper(tHip, tTop, 14f, 17f, c.near)
         heat(c.near, "Chest", false)?.let { col ->
             listOf(1f, -1f).forEach { s -> seg(lerp(tHip, tTop, 0.62f) + across * (3.6f * s), lerp(tHip, tTop, 0.84f) + across * (3.6f * s), 6f, col) }
         }
@@ -570,13 +557,13 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         }
         heat(c.near, "Core", false)?.let { seg(lerp(tHip, tTop, 0.08f), lerp(tHip, tTop, 0.48f), 5.5f, it) }
     } else {
-        dot(b.hip, 5.8f * middle, c.near)
-        taper(tHip, tTop, 11.5f * middle, 13.6f * chest, c.near)
+        dot(b.hip, 5.8f, c.near)
+        taper(tHip, tTop, 11.5f, 13.6f, c.near)
         muscle(tHip, tTop, 12.5f, -1f, 0.55f, 0.92f, heat(c.near, "Chest", false))
         muscle(tHip, tTop, 12.5f, 1f, 0.3f, 0.92f, heat(c.near, "Back", false))
         muscle(tHip, tTop, 12.5f, -1f, 0.08f, 0.5f, heat(c.near, "Core", false))
     }
-    taper(b.shoulder, lerp(b.shoulder, b.head, 0.7f), 5.4f * (1f + 0.2f * m), 4.4f * (1f + 0.2f * m), c.near)
+    taper(b.shoulder, lerp(b.shoulder, b.head, 0.7f), 5.4f, 4.4f, c.near)
     dot(b.head, head, c.near)
     if (look.hair) {
         // Hair as a cap over the top and back of the head: the head circle cut by one shifted up and back.
@@ -584,8 +571,10 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         val back = if (front) Offset.Zero else Offset(-up.y, up.x)
         val hairColor = lerp(HAIR_DARK, HAIR_WHITE, look.grey.coerceIn(0f, 1f))
         val r = head * k.scale
+        // From the front only the top shows, so the face stays clear.
+        val lift = if (front) 0.78f else 0.5f
         clipPath(androidx.compose.ui.graphics.Path().apply { addOval(androidx.compose.ui.geometry.Rect(k.px(b.head), r)) }) {
-            drawCircle(hairColor, r * 1.04f, k.px(b.head + up * (head * 0.5f) + back * (head * 0.32f)))
+            drawCircle(hairColor, r * 1.04f, k.px(b.head + up * (head * lift) + back * (head * 0.32f)))
         }
     }
 
@@ -688,6 +677,33 @@ fun ExerciseThumb(name: String, modifier: Modifier = Modifier, size: Dp = 44.dp,
         Box(modifier.size(size).clip(shape).background(P.bgControl), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.FitnessCenter, null, tint = P.textTertiary, modifier = Modifier.size(size * 0.42f))
         }
+    }
+}
+
+/**
+ * The figure celebrating a finished workout, seen from the front: a small hop with the arms going
+ * up into a V, then landing and holding it. Plays once; not in the exercise library.
+ */
+private val cheer = Figure(
+    Pose(hand = onBody(2f, -28f), foot = room(6f, 3f)),
+    Pose(hand = onBody(8.5f, 27f), foot = room(8f, 3f)),
+    mid = Pose(Offset(0f, 50f), hand = onBody(7f, 26f), foot = room(6.5f, 9.5f)),
+    front = true, elbow = Offset(1f, 0f)
+)
+
+/** [cheer], played once when shown, as [look] (the user's age from setup). */
+@Composable
+fun CheerFigure(modifier: Modifier = Modifier, look: FigureLook = FigureLook(), background: Color = LocalPalette.current.bgPrimary) {
+    val P = LocalPalette.current
+    val t = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(250)
+        t.animateTo(1f, tween(950, easing = FastOutSlowInEasing))
+    }
+    val bounds = remember { cheer.bounds() }
+    val palette = remember(P, background) { paletteFor(P, background) }
+    Canvas(modifier) {
+        drawFigure(cheer, cheer.at(t.value), fit(bounds, size, cheer.turn), palette, FloatArray(0), look)
     }
 }
 

@@ -129,7 +129,7 @@ fun OnboardingScreen(
         ) { s ->
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp)) {
                 if (s == 0) {
-                    AboutYouHero(age, weightKg, experience, goal)
+                    AboutYouHero(age, weightKg)
                     Spacer(Modifier.height(16.dp))
                     Text(tr("Welcome"), style = AppType.display, color = P.textPrimary)
                     Spacer(Modifier.height(6.dp))

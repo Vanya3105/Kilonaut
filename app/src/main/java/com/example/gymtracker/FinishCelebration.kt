@@ -11,6 +11,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
+import java.util.Calendar
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.exp
@@ -50,6 +53,12 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
     val P = LocalPalette.current
     BackHandler(onBack = onDone)
     val bests = data.bests
+    val context = LocalContext.current
+    val look = remember { lookFor(LocalStorage.loadUserProfile(context).age) }
+    // Read after the save, so this workout counts.
+    val week = remember {
+        computeWeekSummary(LocalStorage.loadHistory(context), 0, LocalStorage.loadUserProfile(context).splitProgram)
+    }
     val badge = remember { Animatable(0f) }
     val content = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -72,20 +81,19 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(56.dp))
-            Box(
-                Modifier.size(112.dp).graphicsLayer { scaleX = badge.value; scaleY = badge.value }
-                    .clip(CircleShape).background(if (bests.isNotEmpty()) P.warningSurface else P.successSurface),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    if (bests.isNotEmpty()) Icons.Rounded.EmojiEvents else Icons.Rounded.Check,
-                    null,
-                    tint = if (bests.isNotEmpty()) P.warningText else P.successText,
-                    modifier = Modifier.size(60.dp)
-                )
+            Spacer(Modifier.height(40.dp))
+            // You, celebrating: the setup figure (your age) hops with its arms up, once. A trophy beside it for a new best.
+            Box(Modifier.size(width = 200.dp, height = 156.dp)) {
+                CheerFigure(Modifier.fillMaxSize(), look = look)
+                if (bests.isNotEmpty()) Box(
+                    Modifier.align(Alignment.TopEnd).size(48.dp).graphicsLayer { scaleX = badge.value; scaleY = badge.value }
+                        .clip(CircleShape).background(P.warningSurface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.EmojiEvents, null, tint = P.warningText, modifier = Modifier.size(26.dp))
+                }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
             Column(
                 Modifier.graphicsLayer { alpha = content.value; translationY = (1f - content.value) * 24.dp.toPx() },
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -115,8 +123,12 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (data.volumeKg > 0) CountUpTile(data.volumeKg.toFloat(), { formatVolume(it.roundToInt()) }, tr("Volume"), Modifier.weight(1f), delayMillis = 550)
-                    else CountUpTile(data.reps.toFloat(), { "${it.roundToInt()}" }, tr("Reps"), Modifier.weight(1f), delayMillis = 550)
+                    when {
+                        data.volumeKg > 0 -> CountUpTile(data.volumeKg.toFloat(), { formatVolume(it.roundToInt()) }, tr("Volume"), Modifier.weight(1f), delayMillis = 550)
+                        data.reps > 0 || data.heldSeconds == 0 -> CountUpTile(data.reps.toFloat(), { "${it.roundToInt()}" }, tr("Reps"), Modifier.weight(1f), delayMillis = 550)
+                        // Only timed sets (planks, hangs): "0 reps" said nothing.
+                        else -> CountUpTile(data.heldSeconds.toFloat(), { formatDuration(it.toLong()) }, tr("Held"), Modifier.weight(1f), delayMillis = 550)
+                    }
                     // No "0 new bests": without one, the tile counts exercises.
                     if (bests.isNotEmpty()) CountUpTile(
                         bests.size.toFloat(), { "${it.roundToInt()}" }, if (bests.size == 1) tr("New best") else tr("New bests"), Modifier.weight(1f),
@@ -150,6 +162,8 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
                         if (bests.size > 4) Text(tr("and {0} more", bests.size - 4), style = AppType.caption, color = P.textTertiary, modifier = Modifier.padding(top = 10.dp))
                     }
                 }
+                Spacer(Modifier.height(18.dp))
+                WeekProgress(data.daysThisWeek, week.workouts.size, week.weeklyGoal, week.recommendedSplit)
                 Spacer(Modifier.height(28.dp))
                 PrimaryButton(tr("Done"), onDone, Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
@@ -159,6 +173,51 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
         }
         // Confetti is for milestones only: after every workout it made the app feel like a game.
         if (isMilestone(data.workoutNumber)) ConfettiBurst(Modifier.fillMaxSize(), pieces = 90, cannons = true)
+    }
+}
+
+/**
+ * The week so far: a dot per day (Sunday first, as everywhere in the app), filled where you
+ * trained, today ringed; how many of the plan's workouts are done; and what's next.
+ */
+@Composable
+private fun WeekProgress(days: Set<Int>, done: Int, goal: Int, next: String) {
+    val P = LocalPalette.current
+    val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+    val letters = (Calendar.SUNDAY..Calendar.SATURDAY).zip(weekdayLetters())
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(P.bgCard).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("This week"), style = AppType.bodyStrong, color = P.textPrimary, modifier = Modifier.weight(1f))
+            Text(
+                if (goal > 0) tr("{0} of {1}", done, goal) else "$done",
+                style = AppType.bodyStrong.copy(fontFeatureSettings = "tnum"),
+                color = if (goal in 1..done) P.successText else P.textPrimary
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            letters.forEach { (d, letter) ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(letter, style = AppType.caption, color = if (d == today) P.textPrimary else P.textTertiary)
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        Modifier.size(22.dp).clip(CircleShape)
+                            .background(if (d in days) P.accentPrimary else P.bgControl)
+                            .then(if (d == today && d !in days) Modifier.border(1.5.dp, P.textTertiary, CircleShape) else Modifier),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (d in days) Icon(Icons.Rounded.Check, null, tint = P.onAccentPrimary, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+        if (next.isNotBlank()) {
+            Spacer(Modifier.height(14.dp))
+            Text(
+                if (goal in 1..done) tr("Plan done for the week. Next time: {0}", shown(next)) else tr("Next: {0}", shown(next)),
+                style = AppType.caption, color = P.textSecondary
+            )
+        }
     }
 }
 

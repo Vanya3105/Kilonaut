@@ -31,42 +31,31 @@ import java.util.Locale
 private val HeroHeight = 196.dp
 
 /**
- * The figure as the user: a young teenager is smaller (adult height by 18), hair greys from the
- * late 30s and is white by about 75, a little less muscle after 60; the goal sets the build (lean
- * for fitness, broad for muscle, thick-set for strength), more of it the more experience.
+ * The figure follows the user's age: a young teenager is smaller with a larger head (adult height
+ * by 18), and hair greys from the late 30s, white by about 75. The goal doesn't change the body
+ * (the owner found the muscular version off-putting, 2026-11-08).
  */
-internal fun lookFor(age: Int?, goal: TrainingGoal?, experience: Experience?): FigureLook {
+internal fun lookFor(age: Int?): FigureLook {
     val years = age?.takeIf { it > 0 } ?: 25
     val height = if (years >= 18) 1f else (0.74f + (years - 10).coerceAtLeast(0) / 8f * 0.26f)
     val grey = ((years - 38) / 37f).coerceIn(0f, 1f)
-    val trained = when (experience) { Experience.BEGINNER -> 0.55f; Experience.ADVANCED -> 1f; else -> 0.8f }
-    var (muscle, waist) = when (goal) {
-        TrainingGoal.MUSCLE -> 1f * trained to 1f
-        TrainingGoal.STRENGTH -> 0.75f * trained to 1f + 0.16f * trained
-        TrainingGoal.GENERAL -> 0.15f * trained to 0.9f
-        null -> 0f to 1f
-    }
-    if (years < 18) muscle *= 0.5f + 0.5f * (height - 0.74f) / 0.26f
-    if (years > 60) muscle -= ((years - 60) / 25f).coerceAtMost(1f) * 0.25f
-    return FigureLook(muscle = muscle, waist = waist, height = height, grey = grey, hair = true)
+    return FigureLook(height = height, grey = grey, hair = true)
 }
 
 /** [look] with each part easing to its new value, so the figure changes as answers are picked. */
 @Composable
 private fun animated(look: FigureLook): FigureLook {
     val spec = tween<Float>(500)
-    val muscle by animateFloatAsState(look.muscle, spec, label = "look_muscle")
-    val waist by animateFloatAsState(look.waist, spec, label = "look_waist")
     val height by animateFloatAsState(look.height, spec, label = "look_height")
     val grey by animateFloatAsState(look.grey, spec, label = "look_grey")
-    return look.copy(muscle = muscle, waist = waist, height = height, grey = grey)
+    return look.copy(height = height, grey = grey)
 }
 
 /** Step 1: you, with a squat in motion. */
 @Composable
-fun AboutYouHero(age: String, weightKg: String, experience: Experience?, goal: TrainingGoal?) {
+fun AboutYouHero(age: String, weightKg: String) {
     val P = LocalPalette.current
-    val look = animated(lookFor(age.toIntOrNull(), goal, experience))
+    val look = animated(lookFor(age.toIntOrNull()))
     Box(Modifier.fillMaxWidth().height(HeroHeight)) {
         AppCard(Modifier.align(Alignment.CenterStart).padding(start = 8.dp).size(150.dp).rotate(-4f), elevated = true, contentPadding = PaddingValues(10.dp)) {
             ExerciseFigure("Back Squat", Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)).background(P.bgControl).padding(8.dp), look = look)
@@ -86,7 +75,7 @@ fun AboutYouHero(age: String, weightKg: String, experience: Experience?, goal: T
 @Composable
 fun TrainingHero(experience: Experience?, goal: TrainingGoal?, age: String) {
     val P = LocalPalette.current
-    val look = animated(lookFor(age.toIntOrNull(), goal, experience))
+    val look = animated(lookFor(age.toIntOrNull()))
     val p = remember(experience, goal) {
         if (experience == null || goal == null) null
         else prescriptionFor(UserProfile(experience = experience, goal = goal), "Barbell Bench Press")

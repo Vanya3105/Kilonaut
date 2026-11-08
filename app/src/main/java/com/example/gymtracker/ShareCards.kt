@@ -78,6 +78,8 @@ data class ShareData(
     val volumeKg: Int,
     /** Reps of the work sets, shown instead of volume for bodyweight workouts. */
     val reps: Int = 0,
+    /** Seconds held in timed work sets (planks, hangs), shown when there's no volume or reps. */
+    val heldSeconds: Int = 0,
     val lifts: List<ShareLift>,
     val bests: List<ShareBest>,
     /** Sets per muscle group, most first; assisting muscles count half, as recovery counts them. */
@@ -152,6 +154,7 @@ fun buildShareData(
         workSets = stats.workSets,
         volumeKg = stats.volumeKg,
         reps = totalWorkReps(done),
+        heldSeconds = done.sumOf { ex -> ex.workSets.sumOf { it.secondCount } },
         lifts = lifts,
         bests = bests,
         muscles = muscles,
