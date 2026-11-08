@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,26 @@ private const val FOREARM = 14f
 private const val THIGH = 21f
 private const val SHIN = 20f
 private const val PLATE = 11f
+private val HAIR_DARK = Color(0xFF3A2C24)
+private val HAIR_WHITE = Color(0xFFE4E2DE)
+
+/**
+ * How the person in a figure looks. The exercise pictures all use the default; the setup pictures
+ * follow the answers (age, goal), so the figure becomes the user.
+ */
+data class FigureLook(
+    /** Build: about −0.3 slim, 0 average, 1 very muscular (wider shoulders, chest, arms and thighs). */
+    val muscle: Float = 0f,
+    /** The middle against the average: under 1 lean, over 1 a lifter's thick trunk. */
+    val waist: Float = 1f,
+    /** Height against an adult's: a young teenager is smaller, with a larger head for their size. */
+    val height: Float = 1f,
+    /** Hair from dark (0) to white (1); only drawn when [hair]. */
+    val grey: Float = 0f,
+    val hair: Boolean = false,
+    /** Set from [height] while drawing: a younger body's head is larger for its size. */
+    val headScale: Float = 1f,
+)
 
 /** Where the far-side hand or foot sits, seen from the side, when a pose doesn't place it: just behind the near one. */
 private val FAR = Offset(-2.5f, 0f)
@@ -353,7 +375,24 @@ private fun fit(b: Bounds, size: Size, turn: Float): Frame {
     return Frame(s, (size.width - w * s) / 2 - b.minX * s, (size.height - h * s) / 2 + b.maxY * s, turn)
 }
 
-private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads: FloatArray) {
+private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads: FloatArray, look: FigureLook = FigureLook()) {
+    if (look.height != 1f) {
+        // Smaller from the feet up, so the figure still stands on the floor.
+        withTransform({ scale(look.height, look.height, k.px(Offset((b.leg.end.x + b.farLeg.end.x) / 2, 0f))) }) {
+            drawFigure(f, b, k, c, loads, look.copy(height = 1f, headScale = 1f + (1f - look.height) * 0.9f))
+        }
+        return
+    }
+    val m = look.muscle
+    // Muscle widens most where it shows: upper arms, shoulders and chest, then thighs; hands and feet stay.
+    val armRoot = 1f + 0.75f * m
+    val armMid = 1f + 0.5f * m
+    val armEnd = 1f + 0.2f * m
+    val legRoot = 1f + 0.4f * m
+    val legMid = 1f + 0.28f * m
+    val chest = 1f + 0.5f * m
+    val middle = look.waist * (1f + 0.12f * m)
+    val head = HEAD * look.headScale
     fun seg(a: Offset, z: Offset, width: Float, color: Color) =
         drawLine(color, k.px(a), k.px(z), width * k.scale, StrokeCap.Round)
     fun dot(p: Offset, r: Float, color: Color) = drawCircle(color, r * k.scale, k.px(p))
@@ -416,20 +455,20 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         // A thin gap in the background colour round the arm, so an arm across the body (same
         // grey) still reads as an arm. Not at the shoulder, where it joins the body.
         if (!far) {
-            taper(lerp(l.root, l.joint, 0.4f), l.joint, 6.2f + 2.4f, 5.4f + 2.4f, c.background)
-            taper(l.joint, l.end, 5.4f + 2.4f, 3.8f + 2.4f, c.background)
+            taper(lerp(l.root, l.joint, 0.4f), l.joint, 6.2f * armRoot + 2.4f, 5.4f * armMid + 2.4f, c.background)
+            taper(l.joint, l.end, 5.4f * armMid + 2.4f, 3.8f * armEnd + 2.4f, c.background)
             dot(l.end, 2.9f + 1.2f, c.background)
         }
-        taper(l.root, l.joint, 7f, 5.4f, base)
-        taper(l.joint, l.end, 5.4f, 3.8f, base)
-        heat(base, "Shoulders", dim)?.let { seg(l.root, lerp(l.root, l.joint, 0.3f), 6.2f, it) }
+        taper(l.root, l.joint, 7f * armRoot, 5.4f * armMid, base)
+        taper(l.joint, l.end, 5.4f * armMid, 3.8f * armEnd, base)
+        heat(base, "Shoulders", dim)?.let { seg(l.root, lerp(l.root, l.joint, 0.3f), 6.2f * armRoot, it) }
         if (front) {
-            muscle(l.root, l.joint, 6.2f, 0f, 0.3f, 0.9f, heat(base, "Biceps", false) ?: heat(base, "Triceps", false))
+            muscle(l.root, l.joint, 6.2f * armRoot, 0f, 0.3f, 0.9f, heat(base, "Biceps", false) ?: heat(base, "Triceps", false))
         } else {
-            muscle(l.root, l.joint, 6.2f, 1f, 0.3f, 0.9f, heat(base, "Biceps", dim))
-            muscle(l.root, l.joint, 6.2f, -1f, 0.3f, 0.9f, heat(base, "Triceps", dim))
+            muscle(l.root, l.joint, 6.2f * armRoot, 1f, 0.3f, 0.9f, heat(base, "Biceps", dim))
+            muscle(l.root, l.joint, 6.2f * armRoot, -1f, 0.3f, 0.9f, heat(base, "Triceps", dim))
         }
-        heat(base, "Forearms", dim)?.let { taper(lerp(l.joint, l.end, 0.12f), lerp(l.joint, l.end, 0.75f), 3.6f, 2.6f, it) }
+        heat(base, "Forearms", dim)?.let { taper(lerp(l.joint, l.end, 0.12f), lerp(l.joint, l.end, 0.75f), 3.6f * armEnd, 2.6f * armEnd, it) }
         dot(l.end, 2.9f, base)
     }
 
@@ -438,8 +477,8 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         val dim = far && !front
         if (front) taper(l.end - dir(toe) * 1f, l.end + dir(toe) * 3.5f, 4f, 3.4f, base)
         else taper(l.end - dir(toe) * 2f, l.end + dir(toe) * 6.2f, 4.4f, 3.2f, base)
-        taper(l.joint, l.end, 6.6f, 4.2f, base)
-        taper(l.root, l.joint, 9.6f, 6.8f, base)
+        taper(l.joint, l.end, 6.6f * legMid, 4.2f, base)
+        taper(l.root, l.joint, 9.6f * legRoot, 6.8f * legMid, base)
         if (front) {
             muscle(l.root, l.joint, 8.6f, 0f, 0f, 0.3f, heat(base, "Glutes", false))
             muscle(l.root, l.joint, 8.6f, 0f, 0.15f, 0.88f, heat(base, "Quads", false) ?: heat(base, "Hamstrings", false))
@@ -522,7 +561,7 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
     val tTop = b.shoulder - b.up * (if (front) 3f else 2.5f)
     if (front) {
         val across = Offset(b.up.y, -b.up.x)
-        taper(tHip, tTop, 14f, 17f, c.near)
+        taper(tHip, tTop, 14f * middle, 17f * chest, c.near)
         heat(c.near, "Chest", false)?.let { col ->
             listOf(1f, -1f).forEach { s -> seg(lerp(tHip, tTop, 0.62f) + across * (3.6f * s), lerp(tHip, tTop, 0.84f) + across * (3.6f * s), 6f, col) }
         }
@@ -531,14 +570,24 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         }
         heat(c.near, "Core", false)?.let { seg(lerp(tHip, tTop, 0.08f), lerp(tHip, tTop, 0.48f), 5.5f, it) }
     } else {
-        dot(b.hip, 5.8f, c.near)
-        taper(tHip, tTop, 11.5f, 13.6f, c.near)
+        dot(b.hip, 5.8f * middle, c.near)
+        taper(tHip, tTop, 11.5f * middle, 13.6f * chest, c.near)
         muscle(tHip, tTop, 12.5f, -1f, 0.55f, 0.92f, heat(c.near, "Chest", false))
         muscle(tHip, tTop, 12.5f, 1f, 0.3f, 0.92f, heat(c.near, "Back", false))
         muscle(tHip, tTop, 12.5f, -1f, 0.08f, 0.5f, heat(c.near, "Core", false))
     }
-    taper(b.shoulder, lerp(b.shoulder, b.head, 0.7f), 5.4f, 4.4f, c.near)
-    dot(b.head, HEAD, c.near)
+    taper(b.shoulder, lerp(b.shoulder, b.head, 0.7f), 5.4f * (1f + 0.2f * m), 4.4f * (1f + 0.2f * m), c.near)
+    dot(b.head, head, c.near)
+    if (look.hair) {
+        // Hair as a cap over the top and back of the head: the head circle cut by one shifted up and back.
+        val up = (b.head - lerp(b.shoulder, b.head, 0.7f)).let { it / max(it.getDistance(), 0.001f) }
+        val back = if (front) Offset.Zero else Offset(-up.y, up.x)
+        val hairColor = lerp(HAIR_DARK, HAIR_WHITE, look.grey.coerceIn(0f, 1f))
+        val r = head * k.scale
+        clipPath(androidx.compose.ui.graphics.Path().apply { addOval(androidx.compose.ui.geometry.Rect(k.px(b.head), r)) }) {
+            drawCircle(hairColor, r * 1.04f, k.px(b.head + up * (head * 0.5f) + back * (head * 0.32f)))
+        }
+    }
 
     if (front) {
         cables(far = true)
@@ -591,7 +640,10 @@ object ExerciseFigures {
  * [background] is what it sits on, used to cut out the barbell plates.
  */
 @Composable
-fun ExerciseFigure(name: String, modifier: Modifier = Modifier, moving: Boolean = true, background: Color = LocalPalette.current.bgControl) {
+fun ExerciseFigure(
+    name: String, modifier: Modifier = Modifier, moving: Boolean = true, background: Color = LocalPalette.current.bgControl,
+    look: FigureLook = FigureLook()
+) {
     val figure = remember(name) { figures[exerciseKey(name)] } ?: return
     val P = LocalPalette.current
     val loads = remember(name) { muscleLoads("", name, ExerciseDatabase.find(name)?.muscle ?: "") }
@@ -617,7 +669,7 @@ fun ExerciseFigure(name: String, modifier: Modifier = Modifier, moving: Boolean 
         }
     }
     Canvas(modifier) {
-        drawFigure(figure, figure.at(time.value), fit(bounds, size, figure.turn), palette, loads)
+        drawFigure(figure, figure.at(time.value), fit(bounds, size, figure.turn), palette, loads, look)
     }
 }
 
@@ -640,10 +692,10 @@ fun ExerciseThumb(name: String, modifier: Modifier = Modifier, size: Dp = 44.dp,
 }
 
 /** One moment ([t] from 0 = start to 1 = end) of [name]'s figure in an [area] at the origin, for screenshot tests. */
-internal fun DrawScope.drawExerciseFigure(name: String, t: Float, P: GymPalette, area: Size, background: Color = P.bgControl) {
+internal fun DrawScope.drawExerciseFigure(name: String, t: Float, P: GymPalette, area: Size, background: Color = P.bgControl, look: FigureLook = FigureLook()) {
     val figure = figures.getValue(exerciseKey(name))
     val loads = muscleLoads("", name, ExerciseDatabase.find(name)?.muscle ?: "")
-    drawFigure(figure, figure.at(t), fit(figure.bounds(), area, figure.turn), paletteFor(P, background), loads)
+    drawFigure(figure, figure.at(t), fit(figure.bounds(), area, figure.turn), paletteFor(P, background), loads, look)
 }
 
 internal val figureNames: Set<String> get() = figures.keys
