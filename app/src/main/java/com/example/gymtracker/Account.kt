@@ -54,7 +54,14 @@ object Account {
     fun start(context: Context) {
         if (listening || !available(context)) return
         listening = true
-        auth().addAuthStateListener { user = it.currentUser?.toUser() }
+        val app = context.applicationContext
+        auth().addAuthStateListener {
+            val now = it.currentUser?.toUser()
+            // A new sign-in brings the account's data in (and sends this phone's) right away.
+            if (now != null && now.uid != user?.uid) CloudSync.request(app, now = true)
+            if (now == null) CloudSync.signedOut()
+            user = now
+        }
         user = auth().currentUser?.toUser()
     }
 

@@ -196,6 +196,7 @@ object LocalStorage {
         refreshContext = appCtx
         mainHandler.removeCallbacks(refreshRunnable)
         mainHandler.postDelayed(refreshRunnable, SURFACE_REFRESH_DEBOUNCE_MS)
+        CloudSync.request(appCtx)
 
         if (notifyInApp) {
             try {
@@ -984,6 +985,72 @@ object LocalStorage {
 
     /** Newest first. The same list instance is returned until history changes, so callers can use it as a stable key. */
     fun loadHistory(context: Context): List<CompletedWorkout> = data(context).history
+
+    // --- Cloud sync (CloudSync) ---
+
+    /** JSON sections that follow the account besides workouts and weigh-ins. Widgets, timers and the running workout stay per phone. */
+    private val CLOUD_ROOT_KEYS = listOf("userProfile", "settings", "plateSetup", "notDuplicates")
+
+    /** Programs, days, exercise notes and settings: everything but workouts and weigh-ins, as one JSON object. */
+    internal fun cloudPlan(context: Context): JSONObject = synchronized(lock) {
+        val out = JSONObject()
+        StoreCodec.writeData(out, data(context).copy(history = emptyList(), weights = emptyList()))
+        out.remove("history")
+        out.remove("weightHistory")
+        val root = root(context)
+        CLOUD_ROOT_KEYS.forEach { key -> root.opt(key)?.let { out.put(key, JSONObject.wrap(it)) } }
+        out
+    }
+
+    internal fun workoutNotes(context: Context): Map<Long, String> = synchronized(lock) {
+        val obj = root(context).optJSONObject("workoutNotes") ?: return emptyMap()
+        obj.keys().asSequence().mapNotNull { k -> k.toLongOrNull()?.let { it to obj.optString(k) } }.toMap()
+    }
+
+    /**
+     * Applies what came from the account in one go: workouts and weigh-ins added, replaced or
+     * deleted by id, and [plan] (from [cloudPlan]) replacing programs, days and settings. The app
+     * redraws afterwards.
+     */
+    internal fun applyCloud(
+        context: Context,
+        workouts: List<Pair<CompletedWorkout, String>>,
+        deletedWorkouts: Set<Long>,
+        weights: List<WeightLogEntry>,
+        deletedWeights: Set<Long>,
+        plan: JSONObject?
+    ) {
+        if (workouts.isEmpty() && deletedWorkouts.isEmpty() && weights.isEmpty() && deletedWeights.isEmpty() && plan == null) return
+        synchronized(lock) {
+            val local = data(context)
+            val workoutIds = workouts.mapTo(HashSet()) { it.first.id } + deletedWorkouts
+            val weightIds = weights.mapTo(HashSet()) { it.id } + deletedWeights
+            var updated = local.copy(
+                history = (local.history.filter { it.id !in workoutIds } + workouts.map { it.first }).sortedByDescending { it.id },
+                weights = (local.weights.filter { it.id !in weightIds } + weights).sortedByDescending { it.id }
+            )
+            if (plan != null) {
+                val p = StoreCodec.readData(plan)
+                updated = updated.copy(
+                    templates = p.templates, notes = p.notes, restDefaults = p.restDefaults, types = p.types ?: local.types,
+                    programs = p.programs, targets = p.targets, trainingMaxes = p.trainingMaxes
+                )
+            }
+            cachedData = onIoThread(context) { db ->
+                RoomStore.replaceAll(db, updated)
+                RoomStore.load(db)
+            }
+            val root = root(context)
+            val notes = root.optJSONObject("workoutNotes") ?: JSONObject().also { root.put("workoutNotes", it) }
+            deletedWorkouts.forEach { notes.remove(it.toString()) }
+            workouts.forEach { (w, note) -> if (note.isBlank()) notes.remove(w.id.toString()) else notes.put(w.id.toString(), note) }
+            if (plan != null) CLOUD_ROOT_KEYS.forEach { key -> plan.opt(key)?.let { root.put(key, it) } }
+            Units.set(unitIn(root))
+            persist(context, root)
+        }
+        if (plan != null) loadUserProfile(context) // keeps TrainingProfile current
+        scheduleSurfaceRefresh(context, notifyInApp = true)
+    }
 }
 
 /** Entries in this copy win over [base] (matched by id or key). */

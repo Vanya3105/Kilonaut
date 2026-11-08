@@ -378,6 +378,8 @@ fun GymTrackerApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 reloadFromDisk.value()
+                Account.start(context)
+                CloudSync.request(context, now = true)
                 pullFromHealth.value()
                 checkForgotten.value()
             } else if (event == Lifecycle.Event.ON_STOP) {
@@ -401,6 +403,16 @@ fun GymTrackerApp(
             context.registerReceiver(receiver, filter)
         }
         onDispose { try { context.unregisterReceiver(receiver) } catch (_: Exception) {} }
+    }
+
+    // The account's changes (another phone's workouts, programs, settings) landed: read them again.
+    val cloudApplied = CloudSync.applied
+    LaunchedEffect(cloudApplied) {
+        if (cloudApplied == 0) return@LaunchedEffect
+        history = LocalStorage.loadHistory(context)
+        userProfile = LocalStorage.loadUserProfile(context)
+        weightHistory = LocalStorage.loadWeightHistory(context)
+        LocalStorage.loadSettings(context).let { if (it != settings) onUpdateSettings(it) }
     }
 
     val workoutVisible = (activeSplit != null && workoutExpanded) || editingPastWorkout != null

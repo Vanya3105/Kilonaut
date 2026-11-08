@@ -1565,5 +1565,16 @@ internal object HebrewText {
         m["Use email"] = "שימוש באימייל"
         m["Wrong email or password."] = "אימייל או סיסמה שגויים."
         m["Your training stays on this phone."] = "האימונים שלכם נשארים בטלפון הזה."
+        m["Couldn't sync. It'll try again later."] = "הסנכרון לא הצליח. ננסה שוב מאוחר יותר."
+        m["No connection. It'll sync when you're online."] = "אין חיבור. הסנכרון יקרה כשתהיו מחוברים."
+        m["Sync now"] = "סנכרון עכשיו"
+        m["Synced at {0}"] = "סונכרן ב־{0}"
+        m["Synced just now"] = "סונכרן הרגע"
+        m["Synced {0}"] = "סונכרן ב־{0}"
+        m["Synced {0} min ago"] = "סונכרן לפני {0} דק׳"
+        m["Syncing…"] = "מסנכרן…"
+        m["The account's database refused access. Its security rules may not be set up yet."] = "מסד הנתונים של החשבון סירב לגישה. ייתכן שכללי האבטחה שלו עוד לא הוגדרו."
+        m["Today's free sync limit is used up. It'll catch up tomorrow."] = "מכסת הסנכרון החינמית להיום נגמרה. הסנכרון יושלם מחר."
+        m["Your training is copied to your account and kept in step on every phone you sign in on."] = "האימונים שלכם מועתקים לחשבון ונשמרים מעודכנים בכל טלפון שתיכנסו ממנו."
     }
 }

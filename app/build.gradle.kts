@@ -108,6 +108,7 @@ dependencies {
     implementation(libs.firebase.crashlytics)
     // The BOM's 25.x needs Kotlin 2.4; keep the last one this compiler reads.
     implementation(libs.firebase.auth) { version { strictly(libs.versions.firebaseAuth.get()) } }
+    implementation(libs.firebase.firestore)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)

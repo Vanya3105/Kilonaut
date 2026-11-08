@@ -87,11 +87,30 @@ fun AccountSection() {
                 }, Modifier.weight(1f))
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
+        val sync = CloudSync.status
         Text(
-            tr("Sign out"), style = AppType.label, color = P.textSecondary,
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable { confirmSignOut = true }.padding(vertical = 10.dp)
+            when {
+                sync.running -> tr("Syncing…")
+                sync.error != null -> sync.error
+                sync.lastSyncAt > 0L -> syncedText(sync.lastSyncAt)
+                else -> tr("Your training is copied to your account and kept in step on every phone you sign in on.")
+            },
+            style = AppType.caption,
+            color = if (sync.error != null && !sync.running) P.dangerText else P.textSecondary
         )
+        Spacer(Modifier.height(4.dp))
+        Row {
+            Text(
+                tr("Sync now"), style = AppType.label, color = if (sync.running) P.textTertiary else P.textPrimary,
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable(enabled = !sync.running) { CloudSync.request(context, now = true) }
+                    .padding(end = 16.dp, top = 10.dp, bottom = 10.dp)
+            )
+            Text(
+                tr("Sign out"), style = AppType.label, color = P.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable { confirmSignOut = true }.padding(horizontal = 16.dp, vertical = 10.dp)
+            )
+        }
     }
 
     if (emailSheet) EmailSignInSheet(onDismiss = { emailSheet = false })
@@ -222,5 +241,15 @@ private fun EmailSignInSheet(onDismiss: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+private fun syncedText(at: Long): String {
+    val minutes = ((System.currentTimeMillis() - at) / 60_000L).toInt()
+    return when {
+        minutes < 1 -> tr("Synced just now")
+        minutes < 60 -> tr("Synced {0} min ago", minutes)
+        android.text.format.DateUtils.isToday(at) -> tr("Synced at {0}", java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(at)))
+        else -> tr("Synced {0}", DateUtils.formatDisplayDate(java.util.Date(at)))
     }
 }
