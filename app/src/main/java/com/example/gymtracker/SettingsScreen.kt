@@ -738,7 +738,7 @@ private fun HealthConnectGroup(onImported: () -> Unit) {
 }
 
 internal const val PRIVACY_POLICY_URL = "https://vanya3105.github.io/Kilonaut/privacy.html"
-private const val WEBSITE_URL = "https://vanya3105.github.io/Kilonaut/"
+private const val RELEASES_URL = "https://github.com/Vanya3105/Kilonaut/releases"
 private const val FEEDBACK_EMAIL = "evtushenkovanya16@gmail.com"
 
 private fun appVersion(context: android.content.Context): String =
@@ -762,8 +762,13 @@ private fun AboutGroup() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         SettingsGroup(tr("About")) {
             LinkRow(Icons.Rounded.Share, tr("Share Kilonaut")) {
-                // Play users get the store page; everyone else the website with the download.
-                val link = if (AppUpdate.installedFromPlay(context)) "https://play.google.com/store/apps/details?id=${context.packageName}" else WEBSITE_URL
+                // Play users get the store page; everyone else this version's GitHub release, with the APK to install.
+                val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+                val link = when {
+                    AppUpdate.installedFromPlay(context) -> "https://play.google.com/store/apps/details?id=${context.packageName}"
+                    version != null -> "$RELEASES_URL/tag/v$version"
+                    else -> RELEASES_URL
+                }
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, tr("I track my workouts with Kilonaut: {0}", link))
