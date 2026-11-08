@@ -907,7 +907,7 @@ internal object HebrewText {
         m["{0} new personal bests"] = "{0} שיאים אישיים חדשים"
         m["They follow light and dark mode or your wallpaper's colours. New: a body-weight widget."] = "הם עוברים בין בהיר לכהה או לוקחים את צבעי הטפט. חדש: ווידג׳ט משקל גוף."
         m["Notes, warm-up sets in one tap, effort per set if you want it, percentages on every lift, and Do it again from History."] = "הערות, סטים של חימום בהקשה, מאמץ בכל סט אם תרצו, טבלת אחוזים לכל תרגיל, ולעשות שוב מההיסטוריה."
-        m["Swap an exercise for one that trains the same muscle, or fit the day into 20–60 minutes."] = "החליפו תרגיל באחר שעובד על אותו שריר, או התאימו את האימון ל־20–60 דקות."
+        m["Swap an exercise for one that trains the same muscle, or fit the day into 20–75 minutes."] = "החליפו תרגיל באחר שעובד על אותו שריר, או התאימו את האימון ל־20–75 דקות."
         m["Machine taken? Short on time?"] = "המכשיר תפוס? אין הרבה זמן?"
         m["Short on time?"] = "אין הרבה זמן?"
         m["~{0} min"] = "~{0} דק׳"
