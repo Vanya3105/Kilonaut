@@ -639,7 +639,7 @@ fun GymTrackerApp(
                         userProfile = userProfile,
                         programName = activeProgram.name,
                         activeSplitTitle = activeSplit?.title,
-                        activeExerciseCount = currentExercises.count { !it.isSkipped },
+                        activeExercises = currentExercises,
                         onStartWorkout = { startWorkout(it) },
                         planFor = { planFor(it) },
                         onStartPlanned = { split, entries -> startWorkout(split, entries) },

@@ -966,8 +966,8 @@ private fun ExerciseCard(
                 } else buildList {
                     if (exercise.targetMuscle.isNotBlank()) add(shown(exercise.targetMuscle))
                     exercise.target?.let { add(tr("Plan {0}", it.label)) }
-                    records.bestSet?.let { add(tr("Best {0}", formatSet(it, exercise.type)).replace(' ', '\u00A0')) }
-                }.joinToString(" · ")
+                    records.bestSet?.let { add(tr("Best {0}", formatSet(it, exercise.type))) }
+                }.joinToString(" · ") { unbroken(it) }
                 // Two lines when open: the plan ("Plan 3 × 8–12") was the part cut off.
                 if (sub.isNotEmpty()) Text(sub, style = AppType.caption, color = P.textSecondary, maxLines = if (collapsed) 1 else 2, overflow = TextOverflow.Ellipsis)
                 if (pillUnderName) Box(Modifier.padding(top = 6.dp)) { restPill() }
@@ -1764,3 +1764,10 @@ internal fun withWarmups(ex: ExerciseEntry, stepDisplay: Float, barDisplay: Floa
     val kept = ex.sets.filter { !(it.isWarmupSet && !it.isCompleted) }
     return ex.copy(sets = (warmups + kept).mapIndexed { i, s -> s.copy(setNumber = i + 1) })
 }
+
+/**
+ * [text] that wraps only as a whole: no line break at its spaces or dashes, so "Plan 3 × 8–12"
+ * never ends a line at "3 ×" (a long name used to push half of it onto the next line).
+ */
+internal fun unbroken(text: String): String =
+    text.replace(' ', '\u00A0').replace("–", "\u2060–\u2060").replace("-", "\u2060-\u2060")

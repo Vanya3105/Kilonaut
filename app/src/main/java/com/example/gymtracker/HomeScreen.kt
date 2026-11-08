@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -42,7 +43,7 @@ fun HomeScreen(
     programName: String,
     activeSplitTitle: String?,
     /** Exercises in the running workout, which may differ from the day's list. */
-    activeExerciseCount: Int,
+    activeExercises: List<ExerciseEntry>,
     onStartWorkout: (WorkoutSplit) -> Unit,
     /** The day's exercises as a workout would start them, for the time estimate and "Short on time?". */
     planFor: (WorkoutSplit) -> List<ExerciseEntry> = { emptyList() },
@@ -121,7 +122,7 @@ fun HomeScreen(
                     split = upNext,
                     history = history,
                     isInProgress = activeSplitTitle != null,
-                    activeExerciseCount = activeExerciseCount,
+                    activeExercises = activeExercises,
                     onStart = { if (upNext.title == QUICK_WORKOUT_TITLE) onStartQuickWorkout() else onStartWorkout(upNext) },
                     planFor = planFor,
                     onStartPlanned = { onStartPlanned(upNext, it) },
@@ -213,7 +214,7 @@ private fun UpNextCard(
     split: WorkoutSplit,
     history: List<CompletedWorkout>,
     isInProgress: Boolean,
-    activeExerciseCount: Int,
+    activeExercises: List<ExerciseEntry>,
     onStart: () -> Unit,
     planFor: (WorkoutSplit) -> List<ExerciseEntry>,
     onStartPlanned: (List<ExerciseEntry>) -> Unit,
@@ -225,7 +226,8 @@ private fun UpNextCard(
     val plannedCount = remember(split.title, isInProgress, history) {
         if (isInProgress) 0 else LocalStorage.loadTemplateForSplit(context, split.title).size
     }
-    val exerciseCount = if (isInProgress) activeExerciseCount else plannedCount
+    val doing = activeExercises.filter { !it.isSkipped }
+    val exerciseCount = if (isInProgress) doing.size else plannedCount
     // How long the day takes as planned; the base for "Short on time?".
     val plan = remember(split.title, isInProgress, history, CoachState.version) {
         if (isInProgress || split.title == QUICK_WORKOUT_TITLE) emptyList() else planFor(split)
@@ -240,18 +242,38 @@ private fun UpNextCard(
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            Text(if (isInProgress) tr("In progress") else tr("Up next"), style = AppType.overline, color = P.accentPrimary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isInProgress) tr("In progress") else tr("Up next"), style = AppType.overline, color = P.accentPrimary, modifier = Modifier.weight(1f))
+                if (isInProgress) RunningClock()
+            }
             Spacer(Modifier.height(6.dp))
             Text(shown(split.title), style = AppType.display, color = P.textPrimary)
-            Text(daySubtitle(split), style = AppType.body, color = P.textSecondary)
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Pill(if (exerciseCount == 1) tr("1 exercise") else tr("{0} exercises", exerciseCount), container = P.bgControl)
-                if (minutes > 0) Pill(tr("~{0} min", minutes), icon = Icons.Rounded.Schedule, container = P.bgControl)
-                Pill(
-                    last?.let { tr("Last done {0}", relativeDay(it.id)) } ?: tr("Not done yet"),
-                    container = P.bgControl
+            if (isInProgress) {
+                // What's happening now, like the bar on the other tabs: the exercise and its next set.
+                val current = doing.firstOrNull { ex -> ex.sets.any { !it.isCompleted } }
+                val done = doing.sumOf { ex -> ex.sets.count { it.isCompleted } }
+                val total = doing.sumOf { it.sets.size }
+                Text(
+                    current?.let { ex -> tr("Now: {0} · set {1} of {2}", shown(ex.name), ex.sets.count { it.isCompleted } + 1, ex.sets.size) }
+                        ?: if (doing.isEmpty()) tr("No exercises yet") else tr("Every set done. Finish when you're ready."),
+                    style = AppType.body, color = P.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill(tr("{0} of {1} sets", done, total), container = P.bgControl)
+                    Pill(if (exerciseCount == 1) tr("1 exercise") else tr("{0} exercises", exerciseCount), container = P.bgControl)
+                }
+            } else {
+                Text(daySubtitle(split), style = AppType.body, color = P.textSecondary)
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill(if (exerciseCount == 1) tr("1 exercise") else tr("{0} exercises", exerciseCount), container = P.bgControl)
+                    if (minutes > 0) Pill(tr("~{0} min", minutes), icon = Icons.Rounded.Schedule, container = P.bgControl)
+                    Pill(
+                        last?.let { tr("Last done {0}", relativeDay(it.id)) } ?: tr("Not done yet"),
+                        container = P.bgControl
+                    )
+                }
             }
             Spacer(Modifier.height(18.dp))
             PrimaryButton(
@@ -522,4 +544,23 @@ private fun RecoverySheet(items: List<MuscleRecoveryItem>, onDismiss: () -> Unit
             }
         }
     }
+}
+
+/** The running workout's clock, or the rest left while resting (then in the accent colour), ticking each second. */
+@Composable
+private fun RunningClock() {
+    val P = LocalPalette.current
+    val context = LocalContext.current
+    val startTime = remember { LocalStorage.getActiveSessionStartTime(context) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var restLeft by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            restLeft = ((LocalStorage.getRestEndTimeMillis(context) - now) / 1000L).coerceAtLeast(0L)
+            kotlinx.coroutines.delay(1000L)
+        }
+    }
+    if (restLeft > 0) Pill(tr("Rest {0}", formatClock(restLeft)), color = P.accentPrimary, container = P.accentSoft, icon = Icons.Rounded.Timer)
+    else Pill(formatClock((now - startTime) / 1000L), icon = Icons.Rounded.Schedule, container = P.bgControl)
 }
