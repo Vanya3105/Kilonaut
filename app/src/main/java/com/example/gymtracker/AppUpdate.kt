@@ -45,6 +45,7 @@ object AppUpdate {
     private const val PREFS = "gym_tracker_update_check"
     private const val KEY_CHECKED = "checked_at"
     private const val KEY_DISMISSED = "dismissed_version"
+    private const val KEY_NEWEST = "newest_version"
     private const val DAY_MS = 24 * 60 * 60 * 1000L
 
     var available by mutableStateOf<Release?>(null)
@@ -92,6 +93,13 @@ object AppUpdate {
         }
     }
 
+    /** The newest release to point people to: the latest one the update check saw, or this install's own. */
+    fun shareVersion(context: Context): String? {
+        val current = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+        val newest = prefs(context).getString(KEY_NEWEST, null)
+        return if (newest != null && (current == null || isNewer(newest, current))) newest else current
+    }
+
     /** "1.0.0-beta.1" → "1.0.0 beta 1", as people read it. */
     fun shownVersion(v: String): String = v.replace(Regex("""-beta\.?(\d*)""")) { m -> " beta" + m.groupValues[1].let { if (it.isEmpty()) "" else " $it" } }
 
@@ -128,7 +136,7 @@ object AppUpdate {
                 }
             }.getOrNull()
         } ?: return
-        p.edit().putLong(KEY_CHECKED, now).apply()
+        p.edit().putLong(KEY_CHECKED, now).putString(KEY_NEWEST, release.version).apply()
         if (isNewer(release.version, current) && p.getString(KEY_DISMISSED, null) != release.version) available = release
     }
 

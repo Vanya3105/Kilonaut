@@ -762,8 +762,8 @@ private fun AboutGroup() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         SettingsGroup(tr("About")) {
             LinkRow(Icons.Rounded.Share, tr("Share Kilonaut")) {
-                // Play users get the store page; everyone else this version's GitHub release, with the APK to install.
-                val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+                // Play users get the store page; everyone else the newest GitHub release, with the APK to install.
+                val version = AppUpdate.shareVersion(context)
                 val link = when {
                     AppUpdate.installedFromPlay(context) -> "https://play.google.com/store/apps/details?id=${context.packageName}"
                     version != null -> "$RELEASES_URL/tag/v$version"

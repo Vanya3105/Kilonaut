@@ -31,9 +31,9 @@ android {
         applicationId = "com.vanyaevtushenko.gymtracker"
         minSdk = 26
         targetSdk = 37
-        versionCode = 39
+        versionCode = 40
         // Betas until the first public release, 1.0.0. The code only ever goes up (it's what Android compares).
-        versionName = "1.0.0-beta.1"
+        versionName = "1.0.0-beta.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

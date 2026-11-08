@@ -1086,9 +1086,10 @@ fun GymTrackerApp(
 
         // After an update: what it brought, once, when nothing else is in the way.
         var whatsNew by remember { mutableStateOf(WhatsNew.pending(context)) }
+        val whatsNewSince = remember { WhatsNew.lastSeen(context) }
         whatsNew?.let { version ->
             if (!showOnboarding && !showWelcome && !workoutVisible) {
-                WhatsNewSheet(version) {
+                WhatsNewSheet(version, since = whatsNewSince ?: "0") {
                     WhatsNew.markSeen(context, version)
                     whatsNew = null
                 }

@@ -18,6 +18,11 @@ import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,7 +44,27 @@ object WhatsNew {
     class Item(val icon: ImageVector, val title: String, val text: String)
 
     /** The highlights of [version], or none. Words through [tr] when shown, so they follow the language. */
+    /** Versions with notes, newest first. */
+    private val VERSIONS = listOf("1.0.0-beta.2", "1.0.0-beta.1")
+
+    /**
+     * [current]'s notes first, then those of versions newer than [since] that weren't seen (an update
+     * can skip some); [since] null: every version up to [current].
+     */
+    internal fun sections(current: String, since: String?): List<Pair<String, List<Item>>> {
+        val older = VERSIONS.filter { v -> v != current && !AppUpdate.isNewer(v, current) && (since == null || AppUpdate.isNewer(v, since)) }
+        return (listOf(current) + older).map { it to notesFor(it) }.filter { it.second.isNotEmpty() }
+    }
+
     internal fun notesFor(version: String): List<Item> = when (version) {
+        "1.0.0-beta.2" -> listOf(
+            Item(Icons.Rounded.EmojiEvents, tr("A better finish"), tr("You celebrate with a small jump, and the screen shows your week and what's next. Timed workouts show the time you held.")),
+            Item(Icons.Rounded.Timer, tr("Today follows your workout"), tr("While a workout runs, Today shows its clock, the rest left and the exercise you're on.")),
+            Item(Icons.Rounded.CloudSync, tr("Sign in on another phone, safely"), tr("If your account and the phone have different plans, you choose which to keep. A phone with someone else's training asks before adding it to your account.")),
+            Item(Icons.Rounded.Schedule, tr("Short on time, clearer"), tr("Every exercise of the day is listed, with what changes for the time you pick.")),
+            Item(Icons.Rounded.Face, tr("Setup that looks like you"), tr("The figure in setup changes with the age you enter.")),
+            Item(Icons.Rounded.Build, tr("Fixes"), tr("Long exercise names no longer split the plan line, and custom exercises keep their type when your account syncs."))
+        )
         "1.0.0-beta.1" -> listOf(
             Item(Icons.Rounded.CloudSync, tr("Your training in your account"), tr("Sign in with Google or email and your workouts, programs and settings are kept in step on every phone you use.")),
             Item(Icons.Rounded.AccountCircle, tr("A new Profile"), tr("You and your totals at the top, your plan below, and every setting on its own page.")),
@@ -70,6 +95,9 @@ object WhatsNew {
         return current.takeIf { notesFor(it).isNotEmpty() }
     }
 
+    /** The last version whose notes were seen, so an update shows what came since. */
+    fun lastSeen(context: Context): String? = prefs(context).getString(KEY_SEEN, null)
+
     /** The installed version, for Profile → What's new. */
     fun currentVersion(context: Context): String? =
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
@@ -80,28 +108,51 @@ object WhatsNew {
     }
 }
 
+/**
+ * What's new: the newest version's notes as the main list, and any versions skipped since [since]
+ * (null: every version, for Profile → What's new) as shorter lists below. "Got it" stays in view.
+ */
 @Composable
-fun WhatsNewSheet(version: String, onDone: () -> Unit) {
+fun WhatsNewSheet(version: String, since: String? = null, onDone: () -> Unit) {
     val P = LocalPalette.current
-    val items = WhatsNew.notesFor(version)
+    val sections = WhatsNew.sections(version, since)
     AppBottomSheet(onDismiss = onDone) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
-            Text(tr("What's new"), style = AppType.label, color = P.accentPrimary)
-            Text("Kilonaut ${AppUpdate.shownVersion(version)}", style = AppType.display, color = P.textPrimary)
-            Spacer(Modifier.height(20.dp))
-            items.forEachIndexed { i, item ->
-                Row(Modifier.padding(bottom = 16.dp).enterAnimation(i + 1), verticalAlignment = Alignment.Top) {
-                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(P.accentSoft), contentAlignment = Alignment.Center) {
-                        Icon(item.icon, null, tint = P.accentPrimary, modifier = Modifier.size(22.dp))
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(item.title, style = AppType.bodyStrong, color = P.textPrimary)
-                        Text(item.text, style = AppType.caption, color = P.textSecondary)
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 20.dp)) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                Text(tr("What's new"), style = AppType.overline, color = P.accentPrimary)
+                Text("Kilonaut ${AppUpdate.shownVersion(version)}", style = AppType.display, color = P.textPrimary)
+                Spacer(Modifier.height(20.dp))
+                sections.firstOrNull()?.second?.forEachIndexed { i, item ->
+                    Row(Modifier.padding(bottom = 18.dp).enterAnimation(i + 1), verticalAlignment = Alignment.Top) {
+                        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(P.accentSoft), contentAlignment = Alignment.Center) {
+                            Icon(item.icon, null, tint = P.accentPrimary, modifier = Modifier.size(24.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(item.title, style = AppType.bodyStrong, color = P.textPrimary)
+                            Spacer(Modifier.height(2.dp))
+                            Text(item.text, style = AppType.body, color = P.textSecondary)
+                        }
                     }
                 }
+                // Versions skipped on the way here (or, from Profile, the ones before): the titles in a card.
+                sections.drop(1).forEach { (v, items) ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(tr("Also in {0}", AppUpdate.shownVersion(v)), style = AppType.overline, color = P.textTertiary)
+                    Spacer(Modifier.height(8.dp))
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(P.bgControl).padding(horizontal = 14.dp, vertical = 6.dp)) {
+                        items.forEach { item ->
+                            Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(item.icon, null, tint = P.textSecondary, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text(item.title, style = AppType.body, color = P.textPrimary)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(12.dp))
             PrimaryButton(tr("Got it"), onDone, Modifier.fillMaxWidth())
         }
     }
