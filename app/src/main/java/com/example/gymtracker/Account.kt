@@ -38,7 +38,7 @@ object Account {
     private const val TAG = "Account"
 
     /** Who is signed in, for the UI; null when nobody is. */
-    data class User(val uid: String, val email: String?, val name: String?, val viaGoogle: Boolean, val verified: Boolean)
+    data class User(val uid: String, val email: String?, val name: String?, val viaGoogle: Boolean, val verified: Boolean, val photoUrl: String? = null)
 
     var user by mutableStateOf<User?>(null)
         private set
@@ -71,7 +71,8 @@ object Account {
         name = displayName?.takeIf { it.isNotBlank() },
         viaGoogle = providerData.any { it.providerId == GoogleAuthProvider.PROVIDER_ID },
         // Google accounts' addresses are verified by Google.
-        verified = isEmailVerified || providerData.any { it.providerId == GoogleAuthProvider.PROVIDER_ID }
+        verified = isEmailVerified || providerData.any { it.providerId == GoogleAuthProvider.PROVIDER_ID },
+        photoUrl = photoUrl?.toString()
     )
 
     private fun refresh() {

@@ -692,7 +692,8 @@ fun GymTrackerApp(
                         },
                         onEditProgram = { editingProgramId = it },
                         onBuildSplit = { buildingSplit = it },
-                        onEditTraining = { onboardingStart = 1; showOnboarding = true }
+                        onEditTraining = { onboardingStart = 1; showOnboarding = true },
+                        history = history
                     )
                 }
             }

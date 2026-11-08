@@ -7,6 +7,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Email
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -26,6 +30,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -39,18 +45,18 @@ fun AccountSection() {
     val user = Account.user
     var confirmSignOut by remember { mutableStateOf(false) }
 
-    var signingIn by remember { mutableStateOf(false) }
     if (user == null) {
-        // The welcome screen and Today ask; here it's only a way back to it.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(tr("Not signed in. Your training is only on this phone."), style = AppType.body, color = P.textSecondary, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(12.dp))
-            SecondaryButton(tr("Sign in"), { signingIn = true })
-        }
-        if (signingIn) SignInSheet(onDismiss = { signingIn = false })
+        Text(tr("Not signed in. Your training is only on this phone."), style = AppType.bodyStrong, color = P.textPrimary)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            tr("Your workouts, programs and settings are saved to your account, so they're there on any phone. Everything here stays as it is."),
+            style = AppType.body, color = P.textSecondary
+        )
+        Spacer(Modifier.height(16.dp))
+        SignInChoices(primary = true)
     } else {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.AccountCircle, null, tint = P.textSecondary, modifier = Modifier.size(40.dp))
+            Avatar(user, 48.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(user.name ?: user.email ?: tr("Signed in"), style = AppType.bodyStrong, color = P.textPrimary)
@@ -132,15 +138,42 @@ fun SignInChoices(primary: Boolean = false, enabled: Boolean = true) {
             }
         }
     }
-    val googleText = if (busy) tr("One moment…") else tr("Continue with Google")
-    if (primary) PrimaryButton(googleText, google, Modifier.fillMaxWidth(), icon = Icons.Rounded.AccountCircle, enabled = enabled && !busy)
-    else SecondaryButton(googleText, google, Modifier.fillMaxWidth(), icon = Icons.Rounded.AccountCircle, enabled = enabled && !busy)
+    GoogleButton(if (busy) tr("One moment…") else tr("Continue with Google"), google, enabled = enabled && !busy)
     Spacer(Modifier.height(10.dp))
     SecondaryButton(
-        tr("Use email"), { emailSheet = true }, Modifier.fillMaxWidth(),
-        icon = Icons.Rounded.Email, enabled = enabled && !busy, height = if (primary) 52.dp else 48.dp
+        tr("Continue with email"), { emailSheet = true }, Modifier.fillMaxWidth(),
+        icon = Icons.Rounded.Email, enabled = enabled && !busy, height = 54.dp
     )
     if (emailSheet) EmailSignInSheet(onDismiss = { emailSheet = false })
+}
+
+/**
+ * Google's own button style (sign-in branding): white with a grey outline and the "G" on light,
+ * near-black on dark. Kept apart from the app's orange, so it reads as Google's and not an action of ours.
+ */
+@Composable
+fun GoogleButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+    val P = LocalPalette.current
+    val bg = if (P.isDark) androidx.compose.ui.graphics.Color(0xFF131314) else androidx.compose.ui.graphics.Color.White
+    val border = if (P.isDark) androidx.compose.ui.graphics.Color(0xFF8E918F) else androidx.compose.ui.graphics.Color(0xFF747775)
+    val fg = if (P.isDark) androidx.compose.ui.graphics.Color(0xFFE3E3E3) else androidx.compose.ui.graphics.Color(0xFF1F1F1F)
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(54.dp)
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, border, shape)
+            .pressable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.ic_google_g), null, Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(text, style = AppType.bodyStrong, color = if (enabled) fg else fg.copy(alpha = 0.5f))
+    }
 }
 
 /** Signing in from Today's card: closes once signed in. */
@@ -318,3 +351,109 @@ private fun syncedText(at: Long): String {
         else -> tr("Synced {0}", DateUtils.formatDisplayDate(java.util.Date(at)))
     }
 }
+
+/** The top of Profile: who you are and whether your training is saved; opens the Account page. */
+@Composable
+fun ProfileHeader(onOpen: () -> Unit) {
+    val P = LocalPalette.current
+    val user = Account.user
+    val sync = CloudSync.status
+    AppCard(Modifier.fillMaxWidth(), onClick = onOpen) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(user, 56.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    user?.let { it.name ?: it.email ?: tr("Signed in") } ?: tr("Sign in"),
+                    style = AppType.title, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    when {
+                        user == null -> tr("Save your training to your account")
+                        sync.running -> tr("Syncing…")
+                        sync.error != null -> tr("Not synced")
+                        sync.lastSyncAt > 0L -> syncedText(sync.lastSyncAt)
+                        else -> user.email ?: ""
+                    },
+                    style = AppType.caption,
+                    color = if (user != null && sync.error != null && !sync.running) P.dangerText else P.textSecondary
+                )
+            }
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = P.textTertiary, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+/** Workouts in all, this week against the program's goal, and weeks in a row. */
+@Composable
+fun ProfileStats(history: List<CompletedWorkout>, weeklyGoal: Int) {
+    val P = LocalPalette.current
+    val c = remember(history) { computeConsistency(history, weeks = 1) }
+    val thisWeek = remember(history) {
+        val start = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.DAY_OF_WEEK, firstDayOfWeek)
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+            if (timeInMillis > System.currentTimeMillis()) add(java.util.Calendar.WEEK_OF_YEAR, -1)
+        }.timeInMillis
+        history.count { it.id >= start }
+    }
+    AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 14.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            @Composable
+            fun Stat(value: String, label: String) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(value, style = AppType.title.copy(fontFeatureSettings = "tnum"), color = P.textPrimary)
+                    Text(label, style = AppType.caption, color = P.textSecondary)
+                }
+            }
+            @Composable
+            fun Divider() = Box(Modifier.width(1.dp).height(32.dp).background(P.borderSubtle))
+            Stat("${c.total}", if (c.total == 1) tr("workout") else tr("workouts"))
+            Divider()
+            Stat("$thisWeek/$weeklyGoal", tr("this week"))
+            Divider()
+            Stat(tr("{0} wk", c.weekStreak), tr("in a row"))
+        }
+    }
+}
+
+/** The Google photo when there is one, else the first letter of the name; a person when signed out. */
+@Composable
+fun Avatar(user: Account.User?, size: androidx.compose.ui.unit.Dp) {
+    val P = LocalPalette.current
+    val context = LocalContext.current
+    val photo by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, user?.photoUrl) {
+        value = user?.photoUrl?.let { AvatarCache.load(context, it) }
+    }
+    Box(Modifier.size(size).clip(androidx.compose.foundation.shape.CircleShape).background(P.accentSoft), contentAlignment = Alignment.Center) {
+        val image = photo
+        when {
+            image != null -> androidx.compose.foundation.Image(
+                image, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+            user != null -> Text(
+                (user.name ?: user.email ?: "?").trim().take(1).uppercase(),
+                style = AppType.title, color = P.accentPrimary
+            )
+            else -> Icon(Icons.Rounded.Person, null, tint = P.accentPrimary, modifier = Modifier.size(size * 0.55f))
+        }
+    }
+}
+
+/** The account photo, downloaded once and kept in the cache folder. */
+private object AvatarCache {
+    suspend fun load(context: Context, url: String): androidx.compose.ui.graphics.ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val file = java.io.File(context.cacheDir, "avatar-${url.hashCode()}.img")
+            if (!file.exists()) {
+                // Google serves 96 px by default; ask for enough for a sharp 56 dp circle.
+                val big = url.replace(Regex("=s\\d+-c$"), "=s256-c")
+                java.net.URL(big).openStream().use { input -> file.outputStream().use { input.copyTo(it) } }
+            }
+            android.graphics.BitmapFactory.decodeFile(file.path)?.let { it.asImageBitmap() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
+

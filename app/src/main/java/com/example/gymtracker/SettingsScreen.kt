@@ -21,6 +21,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
@@ -99,7 +115,8 @@ fun SettingsScreen(
     onDataRestored: () -> Unit,
     onEditProgram: (String) -> Unit,
     onBuildSplit: (String) -> Unit,
-    onEditTraining: () -> Unit
+    onEditTraining: () -> Unit,
+    history: List<CompletedWorkout> = emptyList()
 ) {
     val P = LocalPalette.current
     val context = LocalContext.current
@@ -163,6 +180,193 @@ fun SettingsScreen(
         }
     }
 
+    // The settings, one page at a time over the profile.
+    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    var shownPage by remember { mutableStateOf(page) }
+    if (page != null) shownPage = page
+
+    @Composable
+    fun PageContent(p: SettingsPage) {
+        when (p) {
+            SettingsPage.ACCOUNT -> SettingsGroup(tr("Account")) { AccountSection() }
+            SettingsPage.SPLIT -> {
+                SettingsGroup(tr("Training split")) {
+                    val current = programFor(userProfile.splitProgram)
+                    SplitPicker(
+                        selectedId = current.id,
+                        onSelect = { onUpdateProfile(userProfile.copy(splitProgram = it.id)) },
+                        onBuild = onBuildSplit,
+                        onEdit = { onEditProgram(it.id) },
+                        cardActionLabel = if (current.isBuiltIn) tr("Customize") else tr("Edit"),
+                        contained = false,
+                        onCardAction = {
+                            if (current.isBuiltIn) {
+                                // Built-in programs stay as they are; edits go to a copy.
+                                val copy = customizedCopy(current)
+                                LocalStorage.saveProgram(context, copy)
+                                onUpdateProfile(userProfile.copy(splitProgram = copy.id))
+                                onEditProgram(copy.id)
+                            } else onEditProgram(current.id)
+                        }
+                    )
+                }
+            }
+            SettingsPage.WORKOUTS -> {
+                    SettingsGroup(tr("Workouts")) {
+                        Text(tr("Units"), style = AppType.label, color = P.textSecondary)
+                        Spacer(Modifier.height(8.dp))
+                        SegmentedControl(
+                            options = listOf(WeightUnit.KG to tr("Kilograms (kg)"), WeightUnit.LB to tr("Pounds (lb)")),
+                            selected = settings.weightUnit,
+                            // Switching only changes how weights are shown; the step resets to the new unit's default.
+                            onSelect = { if (it != settings.weightUnit) onUpdateSettings(settings.copy(weightUnit = it, weightStep = it.defaultStep)) }
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(tr("Weight step"), style = AppType.label, color = P.textSecondary)
+                        Spacer(Modifier.height(8.dp))
+                        ChoiceChips(
+                            options = settings.weightUnit.stepPresets.map { it to "${formatKgClean(it)} ${settings.weightUnit.label}" },
+                            selected = settings.weightStep,
+                            onSelect = { onUpdateSettings(settings.copy(weightStep = it)) }
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(tr("Default rest between sets"), style = AppType.label, color = P.textSecondary)
+                        Spacer(Modifier.height(8.dp))
+                        ChoiceChips(
+                            options = listOf(0 to tr("Off"), 60 to tr("1 min"), 90 to "1:30", 120 to tr("2 min"), 180 to tr("3 min"), 240 to tr("4 min")),
+                            selected = settings.restTimerSeconds,
+                            onSelect = { onUpdateSettings(settings.copy(restTimerSeconds = it)) }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        ToggleRow(
+                            tr("Sound when rest ends"),
+                            tr("A short beep that lowers your music instead of stopping it"),
+                            settings.restSoundEnabled
+                        ) { onUpdateSettings(settings.copy(restSoundEnabled = it)) }
+                        ToggleRow(tr("Effort per set"), tr("After a set, tap how many more reps you had in you"), settings.trackEffort) {
+                            onUpdateSettings(settings.copy(trackEffort = it))
+                        }
+                        ToggleRow(tr("Keep screen on"), tr("While a workout is open"), settings.keepScreenAwake) {
+                            onUpdateSettings(settings.copy(keepScreenAwake = it))
+                        }
+                        ToggleRow(tr("Vibration"), null, settings.hapticsEnabled) {
+                            onUpdateSettings(settings.copy(hapticsEnabled = it))
+                        }
+                        if (!notificationsOn) {
+                            LinkRow(Icons.Rounded.NotificationsOff, tr("Workout notification is off")) {
+                                val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
+                            }
+                            Text(
+                                tr("Turn it on to see your set and rest timer on the lock screen while you train."),
+                                style = AppType.caption,
+                                color = P.textTertiary
+                            )
+                        }
+                    }
+        
+            }
+            SettingsPage.REMINDERS -> {
+                RemindersGroup(settings, userProfile.daysPerWeek, onUpdateSettings)
+            }
+            SettingsPage.BACKUPS -> {
+                    SettingsGroup(tr("Backups")) {
+                        BackupsSection(
+                            onRestoreContent = { pendingBackup = it },
+                            onRestoreFile = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                            onSaveFile = { exportLauncher.launch("kilonaut_backup.json") }
+                        )
+                    }
+        
+            }
+            SettingsPage.HEALTH -> {
+                HealthConnectGroup(onImported = onDataRestored)
+            }
+            SettingsPage.APPS -> {
+                    SettingsGroup(tr("Other apps")) {
+                        LinkRow(Icons.Rounded.MoveToInbox, tr("Import from Strong or Hevy")) {
+                            otherAppLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
+                        }
+                        Text(
+                            tr("Added to your history. A copy of your data is kept first."),
+                            style = AppType.caption,
+                            color = P.textTertiary
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        LinkRow(Icons.Rounded.TableChart, tr("Export workouts as CSV")) {
+                            csvLauncher.launch("kilonaut-workouts-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(Date())}.csv")
+                        }
+                        Text(
+                            tr("One row per set, in Strong's layout, so other apps can read it."),
+                            style = AppType.caption,
+                            color = P.textTertiary
+                        )
+                    }
+        
+            }
+            SettingsPage.APPEARANCE -> {
+                    SettingsGroup(tr("Appearance")) {
+                        SegmentedControl(
+                            options = listOf(THEME_SYSTEM to tr("System"), THEME_LIGHT to tr("Light"), THEME_DARK to tr("Dark")),
+                            selected = settings.themeChoice,
+                            onSelect = { onUpdateSettings(settings.copy(themeChoice = it)) }
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(stringResource(R.string.settings_language), style = AppType.label, color = P.textSecondary)
+                        Spacer(Modifier.height(8.dp))
+                        SegmentedControl(
+                            options = AppLanguage.entries.map { it to it.label },
+                            selected = remember { AppLanguage.current(context) },
+                            onSelect = { language -> context.findActivity()?.let { AppLanguage.set(it, language) } }
+                        )
+                    }
+        
+            }
+            SettingsPage.HELP -> {
+                    SettingsGroup(tr("Help")) {
+                        LinkRow(Icons.Rounded.Lightbulb, tr("Show tips again")) {
+                            TutorialPrefs.resetAllTutorials(context)
+                            onReplayTips()
+                        }
+                        Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Rounded.Widgets, null, tint = P.textSecondary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                tr("Add widgets from your home screen. Long-press one to change how it looks."),
+                                style = AppType.caption,
+                                color = P.textSecondary
+                            )
+                        }
+                    }
+        
+            }
+            SettingsPage.ADVANCED -> {
+                    SettingsGroup(tr("Advanced")) {
+                        ToggleRow(
+                            title = tr("Smooth scrolling"),
+                            subtitle = tr("120 Hz. Off saves battery."),
+                            checked = settings.targetFps >= 120,
+                            onCheckedChange = { onUpdateSettings(settings.copy(targetFps = if (it) 120 else 60)) }
+                        )
+                        if (CrashReports.available(context)) {
+                            var crashReports by remember { mutableStateOf(CrashReports.isOn(context)) }
+                            ToggleRow(
+                                title = tr("Send crash reports"),
+                                subtitle = tr("What went wrong and the phone model, never your workouts."),
+                                checked = crashReports,
+                                onCheckedChange = { crashReports = it; CrashReports.set(context, it) }
+                            )
+                        }
+                        LinkRow(Icons.Rounded.DeleteForever, tr("Delete all data"), danger = true) { confirmDeleteAll = true }
+                    }
+        
+            }
+            SettingsPage.ABOUT -> AboutGroup()
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -171,9 +375,9 @@ fun SettingsScreen(
             Text(tr("Profile"), style = AppType.display, color = P.textPrimary, modifier = Modifier.statusBarsPadding().padding(top = 20.dp))
         }
 
-        if (Account.available(context)) item {
-            SettingsGroup(tr("Account")) { AccountSection() }
-        }
+        if (Account.available(context)) item { ProfileHeader(onOpen = { page = SettingsPage.ACCOUNT }) }
+
+        item { ProfileStats(history, programFor(userProfile.splitProgram).weeklyGoal) }
 
         item {
             SettingsGroup(tr("Your training")) {
@@ -208,14 +412,21 @@ fun SettingsScreen(
         item {
             SettingsGroup(tr("Training split")) {
                 val current = programFor(userProfile.splitProgram)
-                SplitPicker(
-                    selectedId = current.id,
-                    onSelect = { onUpdateProfile(userProfile.copy(splitProgram = it.id)) },
-                    onBuild = onBuildSplit,
-                    onEdit = { onEditProgram(it.id) },
-                    cardActionLabel = if (current.isBuiltIn) tr("Customize") else tr("Edit"),
-                    contained = false,
-                    onCardAction = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(shown(current.name), style = AppType.title, color = P.textPrimary)
+                        Text(tr("{0} days a week", current.splits.size), style = AppType.caption, color = P.textSecondary)
+                    }
+                    SecondaryButton(tr("Change"), { page = SettingsPage.SPLIT })
+                }
+                Spacer(Modifier.height(10.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    current.splits.forEach { Pill(shown(it.title)) }
+                }
+                Spacer(Modifier.height(12.dp))
+                SecondaryButton(
+                    if (current.isBuiltIn) tr("Customize") else tr("Edit"),
+                    {
                         if (current.isBuiltIn) {
                             // Built-in programs stay as they are; edits go to a copy.
                             val copy = customizedCopy(current)
@@ -223,163 +434,30 @@ fun SettingsScreen(
                             onUpdateProfile(userProfile.copy(splitProgram = copy.id))
                             onEditProgram(copy.id)
                         } else onEditProgram(current.id)
-                    }
+                    },
+                    Modifier.fillMaxWidth()
                 )
             }
         }
 
         item {
-            SettingsGroup(tr("Backups")) {
-                BackupsSection(
-                    onRestoreContent = { pendingBackup = it },
-                    onRestoreFile = { importLauncher.launch(arrayOf("application/json", "*/*")) },
-                    onSaveFile = { exportLauncher.launch("kilonaut_backup.json") }
-                )
-            }
-        }
-
-        item {
-            SettingsGroup(tr("Workouts")) {
-                Text(tr("Units"), style = AppType.label, color = P.textSecondary)
-                Spacer(Modifier.height(8.dp))
-                SegmentedControl(
-                    options = listOf(WeightUnit.KG to tr("Kilograms (kg)"), WeightUnit.LB to tr("Pounds (lb)")),
-                    selected = settings.weightUnit,
-                    // Switching only changes how weights are shown; the step resets to the new unit's default.
-                    onSelect = { if (it != settings.weightUnit) onUpdateSettings(settings.copy(weightUnit = it, weightStep = it.defaultStep)) }
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(tr("Weight step"), style = AppType.label, color = P.textSecondary)
-                Spacer(Modifier.height(8.dp))
-                ChoiceChips(
-                    options = settings.weightUnit.stepPresets.map { it to "${formatKgClean(it)} ${settings.weightUnit.label}" },
-                    selected = settings.weightStep,
-                    onSelect = { onUpdateSettings(settings.copy(weightStep = it)) }
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(tr("Default rest between sets"), style = AppType.label, color = P.textSecondary)
-                Spacer(Modifier.height(8.dp))
-                ChoiceChips(
-                    options = listOf(0 to tr("Off"), 60 to tr("1 min"), 90 to "1:30", 120 to tr("2 min"), 180 to tr("3 min"), 240 to tr("4 min")),
-                    selected = settings.restTimerSeconds,
-                    onSelect = { onUpdateSettings(settings.copy(restTimerSeconds = it)) }
-                )
-                Spacer(Modifier.height(8.dp))
-                ToggleRow(
-                    tr("Sound when rest ends"),
-                    tr("A short beep that lowers your music instead of stopping it"),
-                    settings.restSoundEnabled
-                ) { onUpdateSettings(settings.copy(restSoundEnabled = it)) }
-                ToggleRow(tr("Effort per set"), tr("After a set, tap how many more reps you had in you"), settings.trackEffort) {
-                    onUpdateSettings(settings.copy(trackEffort = it))
-                }
-                ToggleRow(tr("Keep screen on"), tr("While a workout is open"), settings.keepScreenAwake) {
-                    onUpdateSettings(settings.copy(keepScreenAwake = it))
-                }
-                ToggleRow(tr("Vibration"), null, settings.hapticsEnabled) {
-                    onUpdateSettings(settings.copy(hapticsEnabled = it))
-                }
-                if (!notificationsOn) {
-                    LinkRow(Icons.Rounded.NotificationsOff, tr("Workout notification is off")) {
-                        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
-                    }
-                    Text(
-                        tr("Turn it on to see your set and rest timer on the lock screen while you train."),
-                        style = AppType.caption,
-                        color = P.textTertiary
-                    )
+            SettingsGroup(tr("Settings"), padding = PaddingValues(vertical = 4.dp)) {
+                val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT && it != SettingsPage.SPLIT }
+                pages.forEachIndexed { i, entry ->
+                    if (i > 0) Box(Modifier.padding(start = 52.dp).fillMaxWidth().height(1.dp).background(P.borderSubtle))
+                    SettingsRow(entry.icon, entry.title, danger = false) { page = entry }
                 }
             }
         }
+    }
 
-        item { RemindersGroup(settings, userProfile.daysPerWeek, onUpdateSettings) }
-
-        item { HealthConnectGroup(onImported = onDataRestored) }
-
-        item {
-            SettingsGroup(tr("Other apps")) {
-                LinkRow(Icons.Rounded.MoveToInbox, tr("Import from Strong or Hevy")) {
-                    otherAppLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
-                }
-                Text(
-                    tr("Added to your history. A copy of your data is kept first."),
-                    style = AppType.caption,
-                    color = P.textTertiary
-                )
-                Spacer(Modifier.height(4.dp))
-                LinkRow(Icons.Rounded.TableChart, tr("Export workouts as CSV")) {
-                    csvLauncher.launch("kilonaut-workouts-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(Date())}.csv")
-                }
-                Text(
-                    tr("One row per set, in Strong's layout, so other apps can read it."),
-                    style = AppType.caption,
-                    color = P.textTertiary
-                )
-            }
-        }
-
-        item {
-            SettingsGroup(tr("Appearance")) {
-                SegmentedControl(
-                    options = listOf(THEME_SYSTEM to tr("System"), THEME_LIGHT to tr("Light"), THEME_DARK to tr("Dark")),
-                    selected = settings.themeChoice,
-                    onSelect = { onUpdateSettings(settings.copy(themeChoice = it)) }
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.settings_language), style = AppType.label, color = P.textSecondary)
-                Spacer(Modifier.height(8.dp))
-                SegmentedControl(
-                    options = AppLanguage.entries.map { it to it.label },
-                    selected = remember { AppLanguage.current(context) },
-                    onSelect = { language -> context.findActivity()?.let { AppLanguage.set(it, language) } }
-                )
-            }
-        }
-
-        item {
-            SettingsGroup(tr("Help")) {
-                LinkRow(Icons.Rounded.Lightbulb, tr("Show tips again")) {
-                    TutorialPrefs.resetAllTutorials(context)
-                    onReplayTips()
-                }
-                Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Rounded.Widgets, null, tint = P.textSecondary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        tr("Add widgets from your home screen. Long-press one to change how it looks."),
-                        style = AppType.caption,
-                        color = P.textSecondary
-                    )
-                }
-            }
-        }
-
-        // Technical options last: most people never need them.
-
-        item {
-            SettingsGroup(tr("Advanced")) {
-                ToggleRow(
-                    title = tr("Smooth scrolling"),
-                    subtitle = tr("120 Hz. Off saves battery."),
-                    checked = settings.targetFps >= 120,
-                    onCheckedChange = { onUpdateSettings(settings.copy(targetFps = if (it) 120 else 60)) }
-                )
-                if (CrashReports.available(context)) {
-                    var crashReports by remember { mutableStateOf(CrashReports.isOn(context)) }
-                    ToggleRow(
-                        title = tr("Send crash reports"),
-                        subtitle = tr("What went wrong and the phone model, never your workouts."),
-                        checked = crashReports,
-                        onCheckedChange = { crashReports = it; CrashReports.set(context, it) }
-                    )
-                }
-                LinkRow(Icons.Rounded.DeleteForever, tr("Delete all data"), danger = true) { confirmDeleteAll = true }
-            }
-        }
-
-        item { AboutGroup() }
+    AnimatedVisibility(
+        visible = page != null,
+        enter = slideInHorizontally(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(150)),
+        exit = slideOutHorizontally(tween(220)) { it / 4 } + fadeOut(tween(200))
+    ) {
+        shownPage?.let { p -> SettingsPageScreen(p.title, onBack = { page = null }) { PageContent(p) } }
+    }
     }
 
     pendingBackup?.let { content ->
@@ -649,7 +727,7 @@ private fun HealthConnectGroup(onImported: () -> Unit) {
     }
 }
 
-private const val PRIVACY_POLICY_URL = "https://vanya3105.github.io/Kilonaut/privacy.html"
+internal const val PRIVACY_POLICY_URL = "https://vanya3105.github.io/Kilonaut/privacy.html"
 private const val WEBSITE_URL = "https://vanya3105.github.io/Kilonaut/"
 private const val FEEDBACK_EMAIL = "evtushenkovanya16@gmail.com"
 
@@ -816,12 +894,86 @@ private fun SharedRow(label: String, shared: Boolean) {
     }
 }
 
+/** On a settings page the page's own title names the group, so the card goes without one. */
+private val LocalOnSettingsPage = staticCompositionLocalOf { false }
+
 @Composable
 private fun SettingsGroup(title: String, padding: PaddingValues = PaddingValues(16.dp), content: @Composable ColumnScope.() -> Unit) {
     val P = LocalPalette.current
     Column {
-        Text(title, style = AppType.overline, color = P.textSecondary, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+        if (!LocalOnSettingsPage.current) {
+            Text(title, style = AppType.overline, color = P.textSecondary, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+        }
         AppCard(Modifier.fillMaxWidth(), contentPadding = padding, content = content)
+    }
+}
+
+/** The settings, each a row on Profile that opens its own page. */
+enum class SettingsPage(val icon: ImageVector) {
+    ACCOUNT(Icons.Rounded.AccountCircle),
+    SPLIT(Icons.Rounded.CalendarMonth),
+    WORKOUTS(Icons.Rounded.FitnessCenter),
+    REMINDERS(Icons.Rounded.Notifications),
+    BACKUPS(Icons.Rounded.CloudUpload),
+    HEALTH(Icons.Rounded.FavoriteBorder),
+    APPS(Icons.Rounded.SwapHoriz),
+    APPEARANCE(Icons.Rounded.Palette),
+    HELP(Icons.AutoMirrored.Rounded.HelpOutline),
+    ADVANCED(Icons.Rounded.Tune),
+    ABOUT(Icons.Rounded.Info);
+
+    val title: String get() = when (this) {
+        ACCOUNT -> tr("Account")
+        SPLIT -> tr("Training split")
+        WORKOUTS -> tr("Workouts")
+        REMINDERS -> tr("Reminders")
+        BACKUPS -> tr("Backups")
+        HEALTH -> tr("Health Connect")
+        APPS -> tr("Import and export")
+        APPEARANCE -> tr("Appearance")
+        HELP -> tr("Help")
+        ADVANCED -> tr("Advanced")
+        ABOUT -> tr("About")
+    }
+}
+
+@Composable
+private fun SettingsRow(icon: ImageVector, text: String, danger: Boolean = false, onClick: () -> Unit) {
+    val P = LocalPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressable(pressedScale = 0.99f, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = if (danger) P.dangerText else P.textSecondary, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(text, style = AppType.body, color = if (danger) P.dangerText else P.textPrimary, modifier = Modifier.weight(1f))
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = P.textTertiary, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** A settings page over Profile: back, its title, then its settings. */
+@Composable
+private fun SettingsPageScreen(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+    val P = LocalPalette.current
+    val backModifier = rememberPredictiveBack(onBack = onBack)
+    Box(backModifier.fillMaxSize().background(P.bgPrimary)) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                Row(Modifier.statusBarsPadding().padding(top = 12.dp)) {
+                    CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), onBack)
+                }
+            }
+            item { Text(title, style = AppType.display, color = P.textPrimary) }
+            item { CompositionLocalProvider(LocalOnSettingsPage provides true) { content() } }
+        }
+        StatusBarScrim()
     }
 }
 
