@@ -9,12 +9,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
-**NEXT SESSION: accounts + cloud database (owner, 2026-11-08). Do this before publishing anything (no beta release until it's done).** People create an account and their data is saved in a free online database, so it follows them to a new phone and isn't only on the device. Start by agreeing the approach with the owner:
-- Options to compare: Firebase (Auth + Firestore; the app already has Firebase Crashlytics and Google sign-in, free Spark tier) vs Supabase (Postgres + Auth, free tier). Check current free-tier limits online first.
-- Sign-in: Google (already used for Drive backups) and probably email; the app must keep working fully offline and without an account.
-- Data: what syncs (workouts, weigh-ins, programs/days, settings, notes, photos?), merging when the same account is on two phones, first sign-in on a phone that already has data, deleting the account and its data (Play requires it), privacy policy update.
-- Keep Drive backup working (or replace it with the account) and decide with the owner.
-- The google-services.json / Firebase project setup is the owner's part.
+**Accounts + cloud sync** (branch `accounts-sync`, owner chose Firebase on 2026-11-08). **No release until it's done.** Step 1 is the owner's (Firebase console); code starts at step 2. Plan and steps are in the "Accounts + cloud sync" section below.
 
 **After accounts:** publish 1.0.0 beta 1 (GitHub pre-release, phone + watch APKs). Later coaching ideas the owner liked: learn exercise preferences from swaps/skips, adapt weekly volume every few weeks, planned deloads, occasional AMRAP check to calibrate reps-left.
 
@@ -74,6 +69,37 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 **Big direction from the owner (2026-10-29), not started, no code yet:** make the app for runners and for bodyweight / calisthenics / outside-the-gym training too, not only the gym. See "Planned: Training types" below. Talk it through with the owner before building.
 
 **App name: Kilonaut** (owner, 2026-11-07; unused online on 2026-10-29 and again 2026-11-07, similar names exist: KiloAI, Kilo). Renamed on branch `kilonaut`: app and watch names, every text people see, share images, Pictures/Kilonaut, backup files (`kilonaut-backup-*`, old names still rotated and restored), website and privacy policy ("formerly GymTracker"). The `applicationId` and internal names stay. GitHub repository renamed to `Vanya3105/Kilonaut` (old links forward; the website moved to vanya3105.github.io/Kilonaut/). Owner: on the Google OAuth consent screen, rename the app and paste the new privacy policy and home page links.
+
+---
+
+## Accounts + cloud sync (branch `accounts-sync`, owner's request 2026-11-08)
+
+People can create an account and their data is kept in the cloud, so it follows them to a new phone or a reinstall. **Why Firebase over Supabase** (compared 2026-11-08): Supabase's free plan pauses a project after 7 days without activity (sign-in and sync would stop during a quiet week); Firebase's free Spark plan never pauses, never charges, and its limits (about 1 GB stored, 50K reads / 20K writes / 20K deletes a day, about 50K monthly users) are far beyond a beta. Over a limit, sync waits until the next day.
+
+**Rules**
+- The phone stays the source of truth: `LocalStorage` and Room as now. The cloud is a copy, synced in the background. Everything works offline and without an account, exactly as today.
+- Free plan only: no Cloud Functions, no Cloud Storage (both need Blaze). Progress photos stay on the phone and in the Drive backup.
+- Drive backup stays as it is (it is separate from the account).
+
+**Firestore layout** (one document per record keeps writes small: a workout is 1 write)
+- `users/{uid}/workouts/{id}`, `users/{uid}/weighins/{id}`: `payload` (the record as `StoreCodec` JSON, so the backup format and its tests are reused), `updatedAt` (server time), `deleted` (a tombstone, so a delete on one phone reaches the others).
+- `users/{uid}/state/{exercises|programs|templates|profile|settings}`: one document each, same fields, last write wins.
+- Security rules: a user reads and writes only `users/{their uid}/**`.
+
+**Sync**
+- Push: after a `LocalStorage` write, the changed records are marked dirty and uploaded with a short delay (WorkManager, needs network), and again on app start.
+- Pull: documents with `updatedAt` newer than the last pull; merge into `LocalStorage`.
+- Merge: workouts and weigh-ins merge by id (both phones' records are kept; the newer edit wins; tombstones delete). The single documents: the newer one wins.
+- First sign-in on a phone that already has data, with data in the account too: merge both (nothing is lost). If the account has no data yet, the phone's data is uploaded.
+- Sign-out: the data stays on the phone; syncing stops.
+
+**Steps**
+- [ ] 1. Owner: Firebase project and `app/google-services.json` (this also turns on Crashlytics). Switch on Authentication (Google + Email/Password) and Firestore (production mode, a region near the owner); add the debug and release SHA-1 fingerprints.
+- [ ] 2. Sign-in: Firebase Auth with Google (Credential Manager) and email + password (verify email, reset password). Profile → Account: signed in as …, sign out. Without `google-services.json` the account row is hidden, so the build still works.
+- [ ] 3. Upload and download: Firestore layout above, security rules in the repo (`firestore.rules`), dirty tracking in `LocalStorage`, a WorkManager sync job; "Last synced …" on the Account page. Tests: merge rules (Robolectric, no network).
+- [ ] 4. Two phones and first sign-in: merge on first sign-in, tombstones, a running workout never syncs until it's finished. Test on the emulator with two accounts.
+- [ ] 5. Delete account (Play requires it): deletes the cloud data and the account, keeps or deletes the phone's data (asks). A web page for deletion requests (Play asks for a link) and a privacy policy update.
+- [ ] 6. What's new line for 1.0.0 beta 1; owner tests on the phone; then publish beta 1.
 
 ---
 
