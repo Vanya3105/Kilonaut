@@ -121,7 +121,8 @@ object CloudSync {
     private const val TIMEOUT_S = 30L
     private const val BATCH = 400
 
-    data class Status(val running: Boolean = false, val lastSyncAt: Long = 0L, val error: String? = null)
+    /** [waiting]: held back by a running workout, which syncs once it's saved. */
+    data class Status(val running: Boolean = false, val lastSyncAt: Long = 0L, val error: String? = null, val waiting: Boolean = false)
 
     var status by mutableStateOf(Status())
         private set
@@ -201,14 +202,19 @@ object CloudSync {
     private fun runOnce(context: Context): Boolean {
         val uid = signedInUid() ?: return false
         // A workout in progress changes with every set; it syncs once it's saved.
-        if (LocalStorage.loadActiveSession(context) != null) return false
-        main.post { status = status.copy(running = true, error = null) }
+        if (LocalStorage.loadActiveSession(context) != null) {
+            main.post { status = status.copy(waiting = true) }
+            return false
+        }
+        main.post { status = status.copy(running = true, error = null, waiting = false) }
         try {
             val db = firestore()
             val user = db.collection("users").document(uid)
             val p = prefs(context)
             val lastPull = p.getLong("$uid.lastPull", 0L)
             val synced = kinds.associate { k -> k.collection to readHashes(p.getString("$uid.${k.collection}", null)) }.toMutableMap()
+            // This phone has never synced its plan with this account: the two are merged, not replaced.
+            val firstSync = synced.getValue("state").isEmpty()
 
             // 1. What changed in the account.
             var newest = lastPull
@@ -224,10 +230,11 @@ object CloudSync {
             // 2. Take it in.
             val pulls = kinds.associate { k -> k.collection to pullPlan(k.local(context), remote.getValue(k.collection), synced.getValue(k.collection)) }
             pulls.forEach { (c, plan) -> synced[c] = plan.second }
-            val landed = applyHere(context, pulls.mapValues { it.value.first })
+            val landed = applyHere(context, pulls.mapValues { it.value.first }, firstSync)
             if (landed) {
                 // What's stored here now is what counts as synced (the same data, written the way this phone writes it).
-                kinds.forEach { k ->
+                // Not a first sync's merged plan: it holds this phone's custom exercises and notes, so it goes up.
+                kinds.filter { !(firstSync && it === state) }.forEach { k ->
                     val now = k.local(context)
                     val changed = pulls.getValue(k.collection).first.keys
                     synced[k.collection] = synced.getValue(k.collection).toMutableMap().apply {
@@ -268,7 +275,7 @@ object CloudSync {
     }
 
     /** Stores what came from the account. True if anything changed here. */
-    private fun applyHere(context: Context, apply: Map<String, Map<String, String?>>): Boolean {
+    private fun applyHere(context: Context, apply: Map<String, Map<String, String?>>, firstSync: Boolean): Boolean {
         val w = apply.getValue("workouts")
         val b = apply.getValue("weighins")
         val s = apply.getValue("state")
@@ -282,7 +289,8 @@ object CloudSync {
             deletedWorkouts = w.filterValues { it == null }.keys.mapNotNull { it.toLongOrNull() }.toSet(),
             weights = b.values.mapNotNull { payload -> payload?.let(::parseWeighInPayload) },
             deletedWeights = b.filterValues { it == null }.keys.mapNotNull { it.toLongOrNull() }.toSet(),
-            plan = s["plan"]?.let { runCatching { JSONObject(it) }.getOrNull() }
+            plan = s["plan"]?.let { runCatching { JSONObject(it) }.getOrNull() },
+            firstSync = firstSync
         )
         s["coach"]?.let { raw -> CoachState.update(context) { CoachState.decode(raw) } }
         return true

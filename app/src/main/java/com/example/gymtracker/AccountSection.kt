@@ -86,6 +86,7 @@ fun AccountSection() {
         Text(
             when {
                 sync.running -> tr("Syncing…")
+                sync.waiting -> tr("A workout is running. It syncs once you save it.")
                 sync.error != null -> sync.error
                 sync.lastSyncAt > 0L -> syncedText(sync.lastSyncAt)
                 else -> tr("Your training is copied to your account and kept in step on every phone you sign in on.")
@@ -370,6 +371,7 @@ fun ProfileHeader(onOpen: () -> Unit) {
                     when {
                         user == null -> tr("Save your training to your account")
                         sync.running -> tr("Syncing…")
+                        sync.waiting -> tr("Syncs after your workout")
                         sync.error != null -> tr("Not synced")
                         sync.lastSyncAt > 0L -> syncedText(sync.lastSyncAt)
                         else -> user.email ?: ""

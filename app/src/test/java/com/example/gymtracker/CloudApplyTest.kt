@@ -81,4 +81,38 @@ class CloudApplyTest {
         LocalStorage.resetForTests()
         assertTrue(LocalStorage.loadHistory(context).any { it.id == 3L })
     }
+
+    /** The account's plan (another phone's), as it would come down. */
+    private fun accountPlan(): JSONObject {
+        LocalStorage.saveTemplateForSplit(context, "Pull", listOf("Row" to "Back"))
+        LocalStorage.setExerciseType(context, "Wall Sit Mine", ExerciseType.DURATION)
+        LocalStorage.saveExerciseNote(context, "Row", "Elbows in")
+        LocalStorage.resetForTests()
+        return JSONObject(LocalStorage.cloudPlan(context).toString()).also { setUp() }
+    }
+
+    @Test
+    fun firstSync_keepsThisPhonesCustomExercisesAndNotes() {
+        val account = accountPlan()
+        LocalStorage.setExerciseType(context, "Plank Mine", ExerciseType.DURATION)
+        LocalStorage.saveExerciseNote(context, "Squat", "Belt on")
+        LocalStorage.applyCloud(context, emptyList(), emptySet(), emptyList(), emptySet(), account, firstSync = true)
+        // The account's days, both phones' exercises and notes.
+        assertEquals(listOf("Row" to "Back"), LocalStorage.loadTemplateForSplit(context, "Pull"))
+        assertEquals(ExerciseType.DURATION, LocalStorage.exerciseType(context, "Plank Mine"))
+        assertEquals(ExerciseType.DURATION, LocalStorage.exerciseType(context, "Wall Sit Mine"))
+        assertEquals("Belt on", LocalStorage.getExerciseNote(context, "Squat"))
+        assertEquals("Elbows in", LocalStorage.getExerciseNote(context, "Row"))
+    }
+
+    @Test
+    fun laterSync_takesTheAccountsNotesButStillKeepsCustomExercises() {
+        val account = accountPlan()
+        LocalStorage.setExerciseType(context, "Plank Mine", ExerciseType.DURATION)
+        LocalStorage.saveExerciseNote(context, "Squat", "Belt on")
+        LocalStorage.applyCloud(context, emptyList(), emptySet(), emptyList(), emptySet(), account)
+        // A note removed on the other phone is gone here too; a custom exercise this phone's workouts use stays.
+        assertEquals("", LocalStorage.getExerciseNote(context, "Squat"))
+        assertEquals(ExerciseType.DURATION, LocalStorage.exerciseType(context, "Plank Mine"))
+    }
 }

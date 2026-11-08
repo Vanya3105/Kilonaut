@@ -1010,7 +1010,9 @@ object LocalStorage {
     /**
      * Applies what came from the account in one go: workouts and weigh-ins added, replaced or
      * deleted by id, and [plan] (from [cloudPlan]) replacing programs, days and settings. The app
-     * redraws afterwards.
+     * redraws afterwards. Custom exercises are always kept from both sides (this phone's workouts may
+     * use one the account doesn't know yet); on a phone's [firstSync] its exercise notes, rest times,
+     * targets and training maxes are kept too where the account has none for that exercise.
      */
     internal fun applyCloud(
         context: Context,
@@ -1018,7 +1020,8 @@ object LocalStorage {
         deletedWorkouts: Set<Long>,
         weights: List<WeightLogEntry>,
         deletedWeights: Set<Long>,
-        plan: JSONObject?
+        plan: JSONObject?,
+        firstSync: Boolean = false
     ) {
         if (workouts.isEmpty() && deletedWorkouts.isEmpty() && weights.isEmpty() && deletedWeights.isEmpty() && plan == null) return
         synchronized(lock) {
@@ -1032,8 +1035,12 @@ object LocalStorage {
             if (plan != null) {
                 val p = StoreCodec.readData(plan)
                 updated = updated.copy(
-                    templates = p.templates, notes = p.notes, restDefaults = p.restDefaults, types = p.types ?: local.types,
-                    programs = p.programs, targets = p.targets, trainingMaxes = p.trainingMaxes
+                    templates = p.templates, programs = p.programs,
+                    types = mergedTypes(local.types, p.types),
+                    notes = if (firstSync) local.notes + p.notes else p.notes,
+                    restDefaults = if (firstSync) local.restDefaults + p.restDefaults else p.restDefaults,
+                    targets = if (firstSync) local.targets + p.targets else p.targets,
+                    trainingMaxes = if (firstSync) local.trainingMaxes + p.trainingMaxes else p.trainingMaxes
                 )
             }
             cachedData = onIoThread(context) { db ->
@@ -1052,6 +1059,10 @@ object LocalStorage {
         scheduleSurfaceRefresh(context, notifyInApp = true)
     }
 }
+
+/** This phone's exercise types with the account's over them; unknown (old data) on one side means the other's. */
+internal fun mergedTypes(local: Map<String, ExerciseType>?, account: Map<String, ExerciseType>?): Map<String, ExerciseType>? =
+    if (local == null) account else if (account == null) local else local + account
 
 /** Entries in this copy win over [base] (matched by id or key). */
 fun StoreData.mergedOver(base: StoreData): StoreData {

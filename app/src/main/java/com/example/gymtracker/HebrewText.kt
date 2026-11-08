@@ -817,6 +817,8 @@ internal object HebrewText {
         m["{0} of {1} muscles still recovering"] = "{0} מתוך {1} שרירים עדיין מתאוששים"
         m["{0} of {1} rested"] = "{0} מתוך {1} מנוחים"
         m["{0} of {1} sets"] = "{0} מתוך {1} סטים"
+        m["A workout is running. It syncs once you save it."] = "אימון פעיל כרגע. הוא יסונכרן אחרי שתשמור אותו."
+        m["Syncs after your workout"] = "יסונכרן אחרי האימון"
         m["No exercises yet"] = "עדיין אין תרגילים"
         m["Now: {0} · set {1} of {2}"] = "עכשיו: {0} · סט {1} מתוך {2}"
         m["Every set done. Finish when you're ready."] = "כל הסטים בוצעו. אפשר לסיים מתי שנוח לך."
