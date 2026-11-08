@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.SwapHoriz
@@ -183,6 +184,7 @@ fun SettingsScreen(
     // The settings, one page at a time over the profile.
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var shownPage by remember { mutableStateOf(page) }
+    var showWhatsNew by remember { mutableStateOf(false) }
     if (page != null) shownPage = page
 
     @Composable
@@ -363,6 +365,7 @@ fun SettingsScreen(
         
             }
             SettingsPage.ABOUT -> AboutGroup()
+            SettingsPage.WHATS_NEW -> Unit
         }
     }
 
@@ -445,7 +448,9 @@ fun SettingsScreen(
                 val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT && it != SettingsPage.SPLIT }
                 pages.forEachIndexed { i, entry ->
                     if (i > 0) Box(Modifier.padding(start = 52.dp).fillMaxWidth().height(1.dp).background(P.borderSubtle))
-                    SettingsRow(entry.icon, entry.title, danger = false) { page = entry }
+                    SettingsRow(entry.icon, entry.title, danger = false) {
+                        if (entry == SettingsPage.WHATS_NEW) showWhatsNew = true else page = entry
+                    }
                 }
             }
         }
@@ -457,6 +462,11 @@ fun SettingsScreen(
         exit = slideOutHorizontally(tween(220)) { it / 4 } + fadeOut(tween(200))
     ) {
         shownPage?.let { p -> SettingsPageScreen(p.title, onBack = { page = null }) { PageContent(p) } }
+    }
+    if (showWhatsNew) {
+        val version = remember { WhatsNew.currentVersion(context) }
+        if (version != null && WhatsNew.notesFor(version).isNotEmpty()) WhatsNewSheet(version) { showWhatsNew = false }
+        else showWhatsNew = false
     }
     }
 
@@ -919,6 +929,7 @@ enum class SettingsPage(val icon: ImageVector) {
     APPS(Icons.Rounded.SwapHoriz),
     APPEARANCE(Icons.Rounded.Palette),
     HELP(Icons.AutoMirrored.Rounded.HelpOutline),
+    WHATS_NEW(Icons.Rounded.NewReleases),
     ADVANCED(Icons.Rounded.Tune),
     ABOUT(Icons.Rounded.Info);
 
@@ -932,6 +943,7 @@ enum class SettingsPage(val icon: ImageVector) {
         APPS -> tr("Import and export")
         APPEARANCE -> tr("Appearance")
         HELP -> tr("Help")
+        WHATS_NEW -> tr("What's new")
         ADVANCED -> tr("Advanced")
         ABOUT -> tr("About")
     }
