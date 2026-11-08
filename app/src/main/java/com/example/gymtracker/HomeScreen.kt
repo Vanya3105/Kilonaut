@@ -57,6 +57,10 @@ fun HomeScreen(
     val program = programFor(userProfile.splitProgram)
     val week = remember(history, program) { computeWeekSummary(history, 0, userProfile.splitProgram) }
     val recovery = remember(history) { computeMuscleRecoveryStatus(history) }
+    // Not signed in: a card at the top of Today until they sign in or say not now.
+    remember { Account.start(context) }
+    var notNow by remember { mutableStateOf(!Account.available(context) || AccountPrompt.dismissed(context)) }
+    val askToSignIn = !notNow && Account.user == null
     val coachVersion = CoachState.version
     val tip = remember(history, splits, coachVersion) {
         coachTip(Coach.days(context, splits), history, CoachState.load(context), System.currentTimeMillis())
@@ -107,6 +111,10 @@ fun HomeScreen(
             }
 
             item { UpdateCard() }
+
+            if (askToSignIn) item(key = "account") {
+                AccountCard(onDismiss = { AccountPrompt.dismiss(context); notNow = true }, modifier = Modifier.enterAnimation(1))
+            }
 
             item {
                 UpNextCard(
@@ -177,8 +185,8 @@ fun HomeScreen(
 
         // Each card is scrolled into view before it's pointed at (Other workouts is below the fold).
         TipTourOverlay(tour, onShowStep = { key ->
-            val coach = if (tip != null) 1 else 0
-            val item = when (key) { "UP_NEXT" -> 0; "WEEK" -> 2 + coach; "RECOVERY" -> 3 + coach; else -> 5 + coach }
+            val coach = (if (tip != null) 1 else 0) + (if (askToSignIn) 1 else 0)
+            val item = when (key) { "UP_NEXT" -> if (askToSignIn) 2 else 0; "WEEK" -> 2 + coach; "RECOVERY" -> 3 + coach; else -> 5 + coach }
             scope.launch { listState.animateScrollToItem(item, scrollOffset = if (item >= 3) -200 else 0) }
         })
     }

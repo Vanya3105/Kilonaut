@@ -73,6 +73,19 @@ fun WelcomeScreen(activity: Activity, haptics: Haptics, onContinue: () -> Unit, 
             else afterSignIn(step)
         }
     }
+    // Signed in to a Kilonaut account here: bring its data in before deciding whether setup is needed.
+    val accounts = remember { Account.available(context).also { if (it) Account.start(context) } }
+    var fetching by remember { mutableStateOf(false) }
+    val signedIn = Account.user != null
+    LaunchedEffect(signedIn) {
+        if (!signedIn || fetching) return@LaunchedEffect
+        fetching = true
+        val synced = CloudSync.syncAndWait(context)
+        fetching = false
+        val profile = LocalStorage.loadUserProfile(context)
+        if (!synced) AppSnackbar.show(tr("Couldn't reach your account just now. Your training will come in once you're online."))
+        if (profile.hasCompletedOnboarding || LocalStorage.loadHistory(context).isNotEmpty()) onRestored() else onContinue()
+    }
     val couldNotRestore = stringResource(R.string.welcome_restore_failed)
     fun restore(file: DriveBackup.DriveBackupFile) {
         haptics.tick()
@@ -126,6 +139,39 @@ fun WelcomeScreen(activity: Activity, haptics: Haptics, onContinue: () -> Unit, 
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(28.dp))
+                    if (accounts) {
+                        if (fetching) {
+                            Text(tr("Getting your training…"), style = AppType.body, color = P.textSecondary, modifier = Modifier.padding(vertical = 40.dp))
+                        } else {
+                            SignInChoices(primary = true, enabled = !signingIn)
+                            Spacer(Modifier.height(10.dp))
+                            SecondaryButton(
+                                text = stringResource(R.string.welcome_no_account),
+                                onClick = { haptics.tick(); onContinue() },
+                                enabled = !signingIn,
+                                modifier = Modifier.fillMaxWidth(),
+                                height = 52.dp
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                tr("Sign in and your training is saved to your account, so it's there on any phone. You can also do it later."),
+                                style = AppType.caption,
+                                color = P.textTertiary,
+                                textAlign = TextAlign.Center
+                            )
+                            // From before accounts: backups in the user's own Drive.
+                            Text(
+                                if (signingIn) stringResource(R.string.welcome_signing_in) else tr("Restore a Google Drive backup"),
+                                style = AppType.label,
+                                color = P.textSecondary,
+                                modifier = Modifier
+                                    .padding(top = 6.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                    .pressable(enabled = !signingIn, onClick = ::signIn)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+                    } else {
                     PrimaryButton(
                         text = stringResource(if (signingIn) R.string.welcome_signing_in else R.string.welcome_google),
                         onClick = ::signIn,
@@ -148,6 +194,7 @@ fun WelcomeScreen(activity: Activity, haptics: Haptics, onContinue: () -> Unit, 
                         color = P.textTertiary,
                         textAlign = TextAlign.Center
                     )
+                    }
                 } else {
                     val date = DateUtils.formatDateTime(
                         context, backup.modifiedMillis,

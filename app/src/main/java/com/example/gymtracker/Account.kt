@@ -80,14 +80,15 @@ object Account {
 
     /** Google's account picker, then Firebase. Null on success (or when cancelled), else what went wrong. */
     suspend fun signInWithGoogle(context: Context): String? {
-        val activity = context.findActivity() ?: return tr("Couldn't open Google sign-in")
-        val clientId = webClientId(context) ?: return tr("Couldn't open Google sign-in")
+        val activity = context.findActivity() ?: return tr("Couldn't open Google sign-in").also { Log.w(TAG, "No activity") }
+        val clientId = webClientId(context) ?: return tr("Couldn't open Google sign-in").also { Log.w(TAG, "No default_web_client_id") }
         return try {
             val request = GetCredentialRequest.Builder()
                 .addCredentialOption(GetSignInWithGoogleOption.Builder(clientId).build())
                 .build()
             val credential = CredentialManager.create(activity).getCredential(activity, request).credential
             if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                Log.w(TAG, "Unexpected credential ${credential.type}")
                 return tr("Couldn't sign in with Google")
             }
             val token = GoogleIdTokenCredential.createFrom(credential.data).idToken

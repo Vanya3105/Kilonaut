@@ -1,5 +1,6 @@
 package com.example.gymtracker
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,7 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-/** Profile → Account: sign in with Google or email, or who is signed in. Hidden without Firebase. */
+/** Profile → Account: who is signed in, sync and sign out; a way to sign in when not. Hidden without Firebase. */
 @Composable
 fun AccountSection() {
     val P = LocalPalette.current
@@ -36,32 +37,17 @@ fun AccountSection() {
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { Account.start(context) }
     val user = Account.user
-    var busy by remember { mutableStateOf(false) }
-    var emailSheet by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
 
+    var signingIn by remember { mutableStateOf(false) }
     if (user == null) {
-        Text(
-            tr("Sign in to keep your training in your account, so it follows you to a new phone. Without one, everything stays on this phone."),
-            style = AppType.body, color = P.textSecondary
-        )
-        Spacer(Modifier.height(14.dp))
-        SecondaryButton(
-            tr("Continue with Google"),
-            onClick = {
-                if (busy) return@SecondaryButton
-                busy = true
-                scope.launch {
-                    Account.signInWithGoogle(context)?.let { AppSnackbar.show(it) }
-                    busy = false
-                }
-            },
-            icon = Icons.Rounded.AccountCircle,
-            enabled = !busy,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        SecondaryButton(tr("Use email"), { emailSheet = true }, Modifier.fillMaxWidth(), icon = Icons.Rounded.Email, enabled = !busy)
+        // The welcome screen and Today ask; here it's only a way back to it.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Not signed in. Your training is only on this phone."), style = AppType.body, color = P.textSecondary, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            SecondaryButton(tr("Sign in"), { signingIn = true })
+        }
+        if (signingIn) SignInSheet(onDismiss = { signingIn = false })
     } else {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.AccountCircle, null, tint = P.textSecondary, modifier = Modifier.size(40.dp))
@@ -113,7 +99,6 @@ fun AccountSection() {
         }
     }
 
-    if (emailSheet) EmailSignInSheet(onDismiss = { emailSheet = false })
     if (confirmSignOut) {
         AlertDialog(
             onDismissRequest = { confirmSignOut = false },
@@ -129,6 +114,86 @@ fun AccountSection() {
             dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text(tr("Cancel"), color = P.textSecondary, style = AppType.label) } }
         )
     }
+}
+
+/** Continue with Google and Use email. [primary]: Google is the screen's main button. */
+@Composable
+fun SignInChoices(primary: Boolean = false, enabled: Boolean = true) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var emailSheet by remember { mutableStateOf(false) }
+    val google = {
+        if (!busy) {
+            busy = true
+            scope.launch {
+                Account.signInWithGoogle(context)?.let { AppSnackbar.show(it) }
+                busy = false
+            }
+        }
+    }
+    val googleText = if (busy) tr("One moment…") else tr("Continue with Google")
+    if (primary) PrimaryButton(googleText, google, Modifier.fillMaxWidth(), icon = Icons.Rounded.AccountCircle, enabled = enabled && !busy)
+    else SecondaryButton(googleText, google, Modifier.fillMaxWidth(), icon = Icons.Rounded.AccountCircle, enabled = enabled && !busy)
+    Spacer(Modifier.height(10.dp))
+    SecondaryButton(
+        tr("Use email"), { emailSheet = true }, Modifier.fillMaxWidth(),
+        icon = Icons.Rounded.Email, enabled = enabled && !busy, height = if (primary) 52.dp else 48.dp
+    )
+    if (emailSheet) EmailSignInSheet(onDismiss = { emailSheet = false })
+}
+
+/** Signing in from Today's card: closes once signed in. */
+@Composable
+fun SignInSheet(onDismiss: () -> Unit) {
+    val P = LocalPalette.current
+    val signedIn = Account.user != null
+    LaunchedEffect(signedIn) { if (signedIn) onDismiss() }
+    AppBottomSheet(onDismiss = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text(tr("Sign in to Kilonaut"), style = AppType.title, color = P.textPrimary)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                tr("Your workouts, programs and settings are saved to your account, so they're there on any phone. Everything here stays as it is."),
+                style = AppType.body, color = P.textSecondary
+            )
+            Spacer(Modifier.height(20.dp))
+            SignInChoices(primary = true)
+        }
+    }
+}
+
+/** Today's nudge to sign in, until signed in or "Not now". */
+@Composable
+fun AccountCard(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val P = LocalPalette.current
+    var signingIn by remember { mutableStateOf(false) }
+    AppCard(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.AccountCircle, null, tint = P.textSecondary, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(tr("Keep your training safe"), style = AppType.bodyStrong, color = P.textPrimary)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(tr("Sign in and it's saved to your account, so a new phone picks up where this one left off."), style = AppType.body, color = P.textSecondary)
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SecondaryButton(tr("Sign in"), { signingIn = true })
+            Spacer(Modifier.width(8.dp))
+            Text(
+                tr("Not now"), style = AppType.label, color = P.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable(onClick = onDismiss).padding(horizontal = 12.dp, vertical = 12.dp)
+            )
+        }
+    }
+    if (signingIn) SignInSheet(onDismiss = { signingIn = false })
+}
+
+/** "Not now" on Today's sign-in card is remembered on this phone. */
+object AccountPrompt {
+    private const val PREFS = "gym_tracker_account_prompt"
+    fun dismissed(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("dismissed", false)
+    fun dismiss(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("dismissed", true).apply()
 }
 
 /** Email and password: sign in, create an account, or get a reset link. */

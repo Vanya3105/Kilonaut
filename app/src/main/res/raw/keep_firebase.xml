@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Account.webClientId looks this up by name (so builds without google-services.json still
+     compile), which resource shrinking can't see: without this, Google sign-in fails in release. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/default_web_client_id" />

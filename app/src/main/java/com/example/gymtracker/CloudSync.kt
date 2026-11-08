@@ -148,6 +148,22 @@ object CloudSync {
         main.postDelayed(runnable, if (now) 0L else DEBOUNCE_MS)
     }
 
+    /**
+     * Syncs now and waits: for the welcome screen, which needs the account's data before deciding
+     * whether setup is needed. False if it couldn't sync (offline, an error).
+     */
+    suspend fun syncAndWait(context: Context): Boolean {
+        val app = context.applicationContext
+        appContext = app
+        main.removeCallbacks(runnable)
+        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            executor.execute {
+                val ok = runOnce(app)
+                if (cont.isActive) cont.resumeWith(Result.success(ok))
+            }
+        }
+    }
+
     fun signedOut() {
         main.removeCallbacks(runnable)
         status = Status()
@@ -181,10 +197,11 @@ object CloudSync {
     }
     private val kinds = listOf(workouts, weighIns, state)
 
-    private fun runOnce(context: Context) {
-        val uid = signedInUid() ?: return
+    /** True when the sync went through. */
+    private fun runOnce(context: Context): Boolean {
+        val uid = signedInUid() ?: return false
         // A workout in progress changes with every set; it syncs once it's saved.
-        if (LocalStorage.loadActiveSession(context) != null) return
+        if (LocalStorage.loadActiveSession(context) != null) return false
         main.post { status = status.copy(running = true, error = null) }
         try {
             val db = firestore()
@@ -241,10 +258,12 @@ object CloudSync {
                 status = Status(lastSyncAt = now)
                 if (landed) applied++
             }
+            return true
         } catch (e: Exception) {
             Log.w(TAG, "Sync failed", e)
             val message = errorText(e)
             main.post { status = status.copy(running = false, error = message) }
+            return false
         }
     }
 
