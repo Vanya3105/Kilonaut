@@ -65,6 +65,7 @@ internal fun swapCandidates(
             if (info != null && c.equipment != info.equipment) score += 1
             if (c.common) score += 1
             if (c.type == current.type) score += 0.5
+            score += swapPreference(c.name, history)
             c to score
         }
         .sortedByDescending { it.second }

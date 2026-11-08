@@ -252,10 +252,10 @@ private class Session(val time: Long, sets: List<SetEntry>, unit: WeightUnit, bo
     // Epley gets unreliable past ~15 reps, where it overstates the max.
     val e1rm = sets.maxOf { calculateEstimated1Rm(unit.fromKg(it.weightKg) + bodyLoad, it.repCount.coerceAtMost(15)) }
     /** Reps left on the top-weight sets that have it recorded (4 = four or more). */
-    val rirs = sets.filter { unit.fromKg(it.weightKg) >= weight - 0.01f && it.rir >= 0 && it.repCount in 1..MAX_RATED_REPS }.map { it.rir }
+    val rirs = sets.filter { unit.fromKg(it.weightKg) >= weight - 0.01f && it.rir >= 0 && it.repCount in 1..MAX_RATED_REPS }.map { it.reserve() }
     /** The max from reps plus reps left (what the set would have been to failure); the plain one without ratings. */
     val effortE1rm = sets.filter { it.rir >= 0 && it.repCount in 1..MAX_RATED_REPS }
-        .maxOfOrNull { calculateEstimated1Rm(unit.fromKg(it.weightKg) + bodyLoad, (it.repCount + it.rir).coerceAtMost(MAX_RATED_REPS)) } ?: e1rm
+        .maxOfOrNull { calculateEstimated1Rm(unit.fromKg(it.weightKg) + bodyLoad, (it.repCount + it.reserve()).coerceAtMost(MAX_RATED_REPS)) } ?: e1rm
 }
 
 /**
@@ -318,15 +318,18 @@ private fun isCompoundLift(exerciseName: String): Boolean {
     } && !lower.contains("pushdown") && !lower.contains("extension") && !lower.contains("fly")
 }
 
+/** The rep range coaching uses for an exercise without a target of its own. */
+fun defaultRepRange(name: String): Pair<Int, Int> =
+    prescriptionFor(TrainingProfile.current, name)?.let { it.repMin to it.repMax } ?: if (isCompoundLift(name)) 6 to 10 else 8 to 12
+
 private fun repGoal(exercise: ExerciseEntry, recent: List<Session>): RepGoal {
     exercise.target?.let { return RepGoal(it.repMin, it.repMax) }
     // No plan, but even sets of 5 or fewer (5×5, 3×3) twice running: strength work, not a miss.
     // Misses look different: the reps tail off from set to set.
     if (recent.size >= 2 && recent.take(2).all { it.firstReps in 1..5 && it.minReps == it.firstReps }) return RepGoal(3, 5)
     // From the setup answers (experience and goal), when there are any.
-    prescriptionFor(TrainingProfile.current, exercise.name)?.let { return RepGoal(it.repMin, it.repMax) }
     // Ranges 4–5 reps wide leave room to progress for a few weeks between jumps.
-    return if (isCompoundLift(exercise.name)) RepGoal(6, 10) else RepGoal(8, 12)
+    return defaultRepRange(exercise.name).let { (min, max) -> RepGoal(min, max) }
 }
 
 private fun bodyLoadFor(type: ExerciseType, history: List<CompletedWorkout>, unit: WeightUnit): Float =
@@ -348,7 +351,9 @@ private fun pastSessions(
             ?.takeIf { it.isNotEmpty() }
             ?.let { Session(workout.id, it, unit, bodyLoad) }
     }
-    // A day can be heavy or light on purpose, so its own history comes first.
+    // A day can be heavy or light on purpose, so its own history comes first. Lighter weeks are
+    // lighter on purpose too, so the next plan builds on the weeks before them.
+    val history = history.outsideLighterWeeks()
     return from(history.filter { it.splitTitle.equals(splitTitle, ignoreCase = true) }).ifEmpty { from(history) }
 }
 
@@ -413,14 +418,15 @@ private fun inSession(done: List<SetEntry>, goal: RepGoal, step: Float, unit: We
         return make(heavier, SuggestionTone.GOOD, tr("{0} reps is light for {1}. Go up to {2} for the next sets.", latest.repCount, goal.text, shown(heavier)))
     }
     // The set just rated: what it would have been to failure says what the next ones should weigh.
-    if (latest.rir >= 0 && latest.repCount in 1..MAX_RATED_REPS && w > 0f) {
-        val toFailure = calculateEstimated1Rm(w + bodyLoad, (latest.repCount + latest.rir).coerceAtMost(MAX_RATED_REPS))
-        if (latest.rir >= 3 && latest.repCount >= goal.min) {
+    val left = latest.reserve()
+    if (left >= 0 && latest.repCount in 1..MAX_RATED_REPS && w > 0f) {
+        val toFailure = calculateEstimated1Rm(w + bodyLoad, (latest.repCount + left).coerceAtMost(MAX_RATED_REPS))
+        if (left >= 3 && latest.repCount >= goal.min) {
             val heavier = maxOf(w + step, minOf(nearestTo(weightFor(toFailure, goal.mid + TARGET_RIR, bodyLoad), step), floorTo(w * 1.15f, step)))
             val spare = if (latest.rir >= 4) "4" else "${latest.rir}"
             return make(heavier, SuggestionTone.GOOD, tr("{0} reps with {1}+ left is light for {2}. Use {3} for the next sets and finish 1–2 reps short of failure.", latest.repCount, spare, goal.text, shown(heavier)))
         }
-        if (latest.rir == 0 && straight.size == 1 && latest.repCount < goal.max) {
+        if (left == 0 && straight.size == 1 && latest.repCount < goal.max) {
             val lighter = minOf(w - step, floorTo(weightFor(toFailure, goal.min + TARGET_RIR, bodyLoad), step)).coerceAtLeast(0f)
             return make(w, SuggestionTone.CAUTION, tr("Set 1 went to failure. Stay at {0} and expect a rep or two fewer, or use {1} to stay in {2}.", shown(w), shown(lighter), goal.text))
         }

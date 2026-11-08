@@ -92,6 +92,7 @@ object LocalStorage {
             } ?: JSONObject()
             cachedRoot = parsed
             Units.set(unitIn(parsed))
+            CoachState.load(context)
             parsed
         }
     }
@@ -946,6 +947,7 @@ object LocalStorage {
 
     /** Saves the workout and ends the active session; the workout reaches disk first. */
     fun saveCompletedWorkout(context: Context, workout: CompletedWorkout, fromWidget: Boolean = false) {
+        Coach.workoutSaved(context, workout)
         editData(context, { d ->
             d.copy(history = (listOf(workout) + d.history.filter { it.id != workout.id }).sortedByDescending { it.id })
         }) { RoomStore.insertWorkout(it, workout) }
@@ -1057,6 +1059,7 @@ internal object StoreCodec {
                 put("isSuperset", ex.isSuperset)
                 ex.planNote?.let { put("planNote", it) }
                 if (ex.programmed) put("programmed", true)
+                if (ex.checkIn) put("checkIn", true)
                 ex.target?.let { t ->
                     put("targetSets", t.sets)
                     put("repMin", t.repMin)
@@ -1115,6 +1118,7 @@ internal object StoreCodec {
                 isSuperset = exObj.optBoolean("isSuperset", false),
                 planNote = exObj.optString("planNote").ifBlank { null },
                 programmed = exObj.optBoolean("programmed", false),
+                checkIn = exObj.optBoolean("checkIn", false),
                 target = if (exObj.has("targetSets")) {
                     ExerciseTarget(exObj.optInt("targetSets", 3), exObj.optInt("repMin", 8), exObj.optInt("repMax", 12))
                 } else null

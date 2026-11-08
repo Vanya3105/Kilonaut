@@ -98,7 +98,9 @@ data class ExerciseEntry(
     /** A program's word on this exercise today, e.g. "5/3/1 · Week 2 of 4 (3s) · TM 100 kg". */
     val planNote: String? = null,
     /** Sets are laid out by a percentage program, so weight suggestions stay out of the way. */
-    val programmed: Boolean = false
+    val programmed: Boolean = false,
+    /** Today's reps-left check: the last set goes as far as good form allows ([checkInDue]). */
+    val checkIn: Boolean = false
 )
 
 /** A planned "sets × rep range" for an exercise on one day of a program. */

@@ -1156,6 +1156,18 @@ fun newExerciseEntry(
     history: List<CompletedWorkout>,
     settings: AppSettings
 ): ExerciseEntry {
+    val entry = newExerciseEntryPlanned(context, splitTitle, name, muscle, history, settings)
+    return if (CoachState.current.deloadAt(System.currentTimeMillis()) != null) lighterWeekVersion(entry, settings.weightStep) else entry
+}
+
+private fun newExerciseEntryPlanned(
+    context: Context,
+    splitTitle: String,
+    name: String,
+    muscle: String,
+    history: List<CompletedWorkout>,
+    settings: AppSettings
+): ExerciseEntry {
     val plan = liftPlanFor(splitTitle, name)
         ?: return newExerciseEntryDefault(context, splitTitle, name, muscle, history, settings)
 
@@ -1251,12 +1263,16 @@ private fun newExerciseEntryDefault(
     // after the big lifts is warm already, and the set would only lengthen the session.
     val warmup = if (prescription != null && !isCompound(name)) emptyList()
     else listOf(SetEntry(1, weight = warmupWeight, reps = "8", isWarmup = true, intensityType = "WARMUP", restSeconds = minOf(60, rest)))
+    val checkIn = splitTitle != QUICK_WORKOUT_TITLE && settings.trackEffort &&
+        checkInDue(name, Coach.days(context, listOf(WorkoutSplit(splitTitle, "", ""))).first().exercises, history, CoachState.current, true, System.currentTimeMillis())
     return ExerciseEntry(
         name = name,
         targetMuscle = muscle,
         restSeconds = rest,
         type = type,
         target = target,
+        checkIn = checkIn,
+        planNote = if (checkIn) tr("Check-in: on the last set, do as many good reps as you can and rate it 0. It tests your reps-left ratings.") else null,
         sets = warmup + List(workSetCount ?: 2) { i -> SetEntry(warmup.size + i + 1, weight = workWeight, reps = targetReps ?: "8", restSeconds = rest) }
     )
 }

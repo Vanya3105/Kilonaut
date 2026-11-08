@@ -57,6 +57,10 @@ fun HomeScreen(
     val program = programFor(userProfile.splitProgram)
     val week = remember(history, program) { computeWeekSummary(history, 0, userProfile.splitProgram) }
     val recovery = remember(history) { computeMuscleRecoveryStatus(history) }
+    val coachVersion = CoachState.version
+    val tip = remember(history, splits, coachVersion) {
+        coachTip(Coach.days(context, splits), history, CoachState.load(context), System.currentTimeMillis())
+    }
     val upNext = when (activeSplitTitle) {
         QUICK_WORKOUT_TITLE -> WorkoutSplit(QUICK_WORKOUT_TITLE, "Exercises you pick as you go", "")
         null -> splits.find { it.title == week.recommendedSplit } ?: splits.first()
@@ -119,6 +123,10 @@ fun HomeScreen(
                 )
             }
 
+            if (tip != null) item(key = "coach") {
+                CoachCard(tip, history, userProfile.equipment, Modifier.enterAnimation(2))
+            }
+
             item {
                 WeekCard(
                     week = week,
@@ -169,7 +177,8 @@ fun HomeScreen(
 
         // Each card is scrolled into view before it's pointed at (Other workouts is below the fold).
         TipTourOverlay(tour, onShowStep = { key ->
-            val item = when (key) { "UP_NEXT" -> 0; "WEEK" -> 2; "RECOVERY" -> 3; else -> 5 }
+            val coach = if (tip != null) 1 else 0
+            val item = when (key) { "UP_NEXT" -> 0; "WEEK" -> 2 + coach; "RECOVERY" -> 3 + coach; else -> 5 + coach }
             scope.launch { listState.animateScrollToItem(item, scrollOffset = if (item >= 3) -200 else 0) }
         })
     }
@@ -210,7 +219,7 @@ private fun UpNextCard(
     }
     val exerciseCount = if (isInProgress) activeExerciseCount else plannedCount
     // How long the day takes as planned; the base for "Short on time?".
-    val plan = remember(split.title, isInProgress, history) {
+    val plan = remember(split.title, isInProgress, history, CoachState.version) {
         if (isInProgress || split.title == QUICK_WORKOUT_TITLE) emptyList() else planFor(split)
     }
     val minutes = if (plan.isEmpty()) 0 else estimateMinutes(plan)

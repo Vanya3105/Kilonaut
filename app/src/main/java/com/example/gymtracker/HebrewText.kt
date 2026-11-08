@@ -9,7 +9,7 @@ package com.example.gymtracker
  */
 internal object HebrewText {
     private val ui: Map<String, String> by lazy {
-        HashMap<String, String>(1646).apply { ui1(this); ui2(this); ui3(this) }
+        HashMap<String, String>(1646).apply { ui1(this); ui2(this); ui3(this); ui4(this) }
     }
     private val names: Map<String, String> by lazy {
         HashMap<String, String>(858).apply { names1(this); names2(this) }
@@ -1481,5 +1481,47 @@ internal object HebrewText {
         m["nSuns Day 3"] = "nSuns יום 3"
         m["nSuns Day 4"] = "nSuns יום 4"
         m["nSuns Day 5"] = "nSuns יום 5"
+    }
+
+    /** The coach: lighter weeks, weekly sets, skips and swaps, the reps-left check. */
+    private fun ui4(m: HashMap<String, String>) {
+        m["A coach across weeks"] = "מאמן לאורך השבועות"
+        m["Lighter weeks when you need them, a set more or less where it helps, and swaps for exercises you keep skipping. With effort per set on, it checks how well you judge reps left."] = "שבועות קלים כשצריך, סט יותר או פחות איפה שזה עוזר, והחלפות לתרגילים שאתם מדלגים עליהם. כשמאמץ לכל סט פועל, הוא בודק כמה טוב אתם מעריכים חזרות ברזרבה."
+        m["Add the set"] = "הוסיפו את הסט"
+        m["Check-in: on the last set, do as many good reps as you can and rate it 0. It tests your reps-left ratings."] = "בדיקה: בסט האחרון עשו כמה שיותר חזרות טובות ודרגו אותו 0. כך נבדקות ההערכות שלכם לחזרות ברזרבה."
+        m["Coach"] = "מאמן"
+        m["End it now"] = "סיימו עכשיו"
+        m["Instead of {0}"] = "במקום {0}"
+        m["Lighter week"] = "שבוע קל"
+        m["Lighter week started"] = "השבוע הקל התחיל"
+        m["Lighter week: half the sets"] = "שבוע קל: חצי מהסטים"
+        m["Lighter week: half the sets, about 10% lighter"] = "שבוע קל: חצי מהסטים, כ־10% פחות משקל"
+        m["Make it part of {0}"] = "הוסיפו אותו ל־{0}"
+        m["Make {0} part of {1}?"] = "להכניס את {0} ל־{1}?"
+        m["No"] = "לא"
+        m["Nothing similar fits your equipment."] = "אין תרגיל דומה שמתאים לציוד שלכם."
+        m["One more set for {0}"] = "עוד סט ל{0}"
+        m["One set fewer for {0}"] = "סט אחד פחות ל{0}"
+        m["Reps-left check"] = "בדיקת חזרות ברזרבה"
+        m["Same muscle. Your pick takes its place on {0}."] = "אותו שריר. מה שתבחרו יחליף אותו ב־{0}."
+        m["Skipping {0}?"] = "מדלגים על {0}?"
+        m["Start lighter week"] = "התחילו שבוע קל"
+        m["Swap it"] = "החליפו אותו"
+        m["Take a set off"] = "הורידו סט"
+        m["Time for a lighter week"] = "הגיע הזמן לשבוע קל"
+        m["Until {0}: about half the sets and 10% lighter. Your weights pick up where they were after it."] = "עד {0}: כחצי מהסטים ו־10% פחות משקל. אחריו המשקלים חוזרים למקום שבו הם היו."
+        m["You had a little less left than you thought, so coaching now counts 1 rep fewer than you rate."] = "נשאר לכם קצת פחות ממה שחשבתם, אז האימון מחשב מעכשיו חזרה אחת פחות ממה שאתם מדרגים."
+        m["You keep a little more in reserve than you think, so coaching now counts 1 more rep left than you rate."] = "נשאר לכם קצת יותר ממה שאתם חושבים, אז האימון מחשב מעכשיו חזרה אחת יותר ממה שאתם מדרגים."
+        m["You keep more in reserve than you think, so coaching now counts {0} more reps left than you rate."] = "נשאר לכם יותר ממה שאתם חושבים, אז האימון מחשב מעכשיו {0} חזרות יותר ממה שאתם מדרגים."
+        m["You skipped it in {0} of your last {1} {2} workouts. Swap it for something you'd rather do, or keep it."] = "דילגתם עליו ב־{0} מתוך {1} האימונים האחרונים של {2}. החליפו אותו במשהו שמתאים לכם יותר, או השאירו אותו."
+        m["You swapped {0} for it on {1} different days."] = "החלפתם את {0} בו ב־{1} ימים שונים."
+        m["Your reps-left ratings are accurate, so coaching takes them as they are."] = "ההערכות שלכם לחזרות ברזרבה מדויקות, אז האימון משתמש בהן כמו שהן."
+        m["{0} gets about {1} sets a week and {2} has slipped over 4 weeks. {3} instead of {4} sets on {5} leaves more to recover from."] = "{0} מקבל כ־{1} סטים בשבוע ו{2} ירד ב־4 השבועות האחרונים. {3} סטים במקום {4} ב־{5} משאירים יותר כוח להתאושש."
+        m["{0} gets about {1} sets a week and {2} hasn't gone up in 4 weeks. {3} instead of {4} sets on {5} gives it more to grow from."] = "{0} מקבל כ־{1} סטים בשבוע ו{2} לא עלה כבר 4 שבועות. {3} סטים במקום {4} ב־{5} נותנים לו יותר גירוי לגדול."
+        m["{0} hard weeks in a row. A week at half the sets and about 10% lighter lets fatigue clear, and you come back stronger."] = "{0} שבועות קשים ברצף. שבוע עם חצי מהסטים וכ־10% פחות משקל נותן לעייפות להתפוגג, ואתם חוזרים חזקים יותר."
+        m["{0} is part of {1}"] = "{0} נמצא עכשיו ב־{1}"
+        m["{0} replaces {1} on {2}"] = "{0} מחליף את {1} ב־{2}"
+        m["{0} reps on the all-out set of {1}; your rating of the set before pointed to about {2}."] = "{0} חזרות בסט המלא של {1}; הדירוג שלכם לסט שלפניו הצביע על כ־{2}."
+        m["{0}: {1} sets on {2}"] = "{0}: {1} סטים ב־{2}"
     }
 }

@@ -11,7 +11,14 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 **Accounts + cloud sync** (branch `accounts-sync`, owner chose Firebase on 2026-11-08). **No release until it's done.** Step 1 is the owner's (Firebase console); code starts at step 2. Plan and steps are in the "Accounts + cloud sync" section below.
 
-**After accounts:** publish 1.0.0 beta 1 (GitHub pre-release, phone + watch APKs). Later coaching ideas the owner liked: learn exercise preferences from swaps/skips, adapt weekly volume every few weeks, planned deloads, occasional AMRAP check to calibrate reps-left.
+**Coach across weeks** (branch `coaching-v3`, on top of `accounts-sync`; owner chose to do these while the Firebase setup waits, 2026-11-08). Built, unit-tested, **not yet tested on the phone**. A "Coach" card on Today shows one thing at a time (`coachTip` in `Coach.kt`, `CoachCard.kt`); state is in SharedPreferences (`CoachState`, this phone only, not in backups yet: add it to sync/backup in accounts step 3).
+- [x] Lighter weeks: offered after 6 hard weeks (2+ workouts each) in a row, or 4 when 2+ main lifts stall. Start → for 7 days new workouts get half the work sets and ~10% less weight, weight advice off (`lighterWeekVersion`); "End it now"; "Not now" waits a week. Coaching ignores lighter-week workouts afterwards (`outsideLighterWeeks`).
+- [x] Weekly sets every 4 weeks: a muscle under 10 sets a week whose main lift hasn't gone up gets +1 set on its day (as the day's target); one over 20 that's slipping loses one (`volumeChange`).
+- [x] Skips and swaps: skipped in 3 of a day's last 4 workouts → swap it (pick replaces it in the day) or keep it; the same one-off swap on 2 days → make it part of the day. Swap suggestions prefer what you swapped to before and avoid what you skip (`swapPreference`).
+- [x] Reps-left check (effort per set on): every ~6 weeks the day's first main lift (rated in 3+ sessions) gets "Check-in: last set as many good reps as you can, rate it 0" (`ExerciseEntry.checkIn`). Its reps vs. the set before (reps + rated left − 1) give a correction (average of the last 3, −1..+3) applied to every rating in coaching (`SetEntry.reserve`); Today shows the result once.
+- [x] What's new line for beta 1; Hebrew for every text; `CoachTest`.
+
+**After accounts:** publish 1.0.0 beta 1 (GitHub pre-release, phone + watch APKs).
 
 **Smarter coaching from effort** (branch `smart-effort`) merged (2026-11-08): "reps left" now drives the weight advice (`planFromEffort`, `inSession`). Next time: top of the range with 2+ to spare → up to the weight for the range's middle with 2 left (nearest plate, at most ~10%); top only by going to failure → one step; mid-range with 3+ left on every set → up anyway. During a workout: a set with 3+ left raises the rest; set 1 to failure → hold, with a lighter option. Science in the comment above WEIGHT SUGGESTIONS (Helms 2018, Graham & Cleather 2020, Robinson 2024, Halperin 2021). Without ratings nothing changes; history and records stay rep-based.
 

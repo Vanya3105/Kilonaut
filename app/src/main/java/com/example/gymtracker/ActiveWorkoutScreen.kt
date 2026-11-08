@@ -652,10 +652,13 @@ fun ActiveWorkoutScreen(
                     val day = if (keep) LocalStorage.daySnapshot(context, split.title) else null
                     updateAt(idx) { replacement }
                     if (keep) LocalStorage.replaceInSplitTemplate(context, split.title, current.name, replacement.name, replacement.targetMuscle)
+                    // Just for today: remembered, so a swap made every time can be offered for good.
+                    else if (onDay) Coach.recordSwap(context, split.title, current.name, replacement.name)
                     AppSnackbar.show(tr("Swapped for {0}", shown(replacement.name)), tr("Undo")) {
                         val at = latestExercises.indexOfFirst { it.name == replacement.name }
                         if (at >= 0) updateAt(at) { current }
                         day?.let { LocalStorage.restoreDay(context, it) }
+                        if (!keep && onDay) Coach.undoSwap(context, split.title, current.name, replacement.name)
                     }
                 }
             )
