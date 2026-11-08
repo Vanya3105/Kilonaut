@@ -21,7 +21,7 @@ private val SEAT_FEET = room(19f, 3f)
 private val RACK = onBody(6f, 1f)
 private val OVERHEAD = onBody(1f, 28.5f)
 private val CURLED = onBody(8.4f, -3.8f)
-private val BACK_BAR = onBody(-3f, 1f)
+private val BACK_BAR = onBody(-5f, -1f)
 private val CHEST_HOLD = onBody(7f, -7f)
 private val HEAD_HOLD = onBody(-5f, 5f)
 
@@ -124,7 +124,7 @@ private fun kneePushUp(): Figure {
 /** Lying on a bench (or the floor), pressing up from the chest. */
 private fun lyingPress(
     incline: Float = 0f, held: Held = Held.Barbell, deep: Float = 10f, smith: Boolean = false,
-    onFloor: Boolean = false, start: Target = onBody(0f, 28.5f), end: Target? = null,
+    onFloor: Boolean = false, start: Target = onBody(2f, 28.5f), end: Target? = null,
     elbow: Offset = p(0.5f, -1f), oneHand: Boolean = false
 ): Figure {
     val torso = -90f + incline
@@ -136,7 +136,7 @@ private fun lyingPress(
     val up = dir(torso)
     val front = Offset(up.y, -up.x)
     val shoulder = hip + up * 27f
-    val low = front * deep - up * 3f
+    val low = front * deep - up * 8f
     val feet = room(hip.x + if (onFloor) 15f else 18f, 3f)
     val parts = mutableListOf<Part>()
     if (!onFloor) {

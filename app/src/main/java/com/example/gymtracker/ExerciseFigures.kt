@@ -357,6 +357,27 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
     fun seg(a: Offset, z: Offset, width: Float, color: Color) =
         drawLine(color, k.px(a), k.px(z), width * k.scale, StrokeCap.Round)
     fun dot(p: Offset, r: Float, color: Color) = drawCircle(color, r * k.scale, k.px(p))
+    /** A limb segment [wa] wide at [a] narrowing (or widening) to [wz] at [z], with rounded ends. */
+    fun taper(a: Offset, z: Offset, wa: Float, wz: Float, color: Color) {
+        val pa = k.px(a)
+        val pz = k.px(z)
+        val ra = wa / 2 * k.scale
+        val rz = wz / 2 * k.scale
+        val d = pz - pa
+        val len = d.getDistance()
+        drawCircle(color, ra, pa)
+        drawCircle(color, rz, pz)
+        if (len < 0.5f) return
+        val n = Offset(-d.y / len, d.x / len)
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(pa.x + n.x * ra, pa.y + n.y * ra)
+            lineTo(pz.x + n.x * rz, pz.y + n.y * rz)
+            lineTo(pz.x - n.x * rz, pz.y - n.y * rz)
+            lineTo(pa.x - n.x * ra, pa.y - n.y * ra)
+            close()
+        }
+        drawPath(path, color)
+    }
     fun load(group: String) = loads.getOrElse(RECOVERY_GROUPS.indexOf(group)) { 0f }
     fun heat(base: Color, group: String, far: Boolean): Color? {
         val l = load(group)
@@ -395,12 +416,12 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         // A thin gap in the background colour round the arm, so an arm across the body (same
         // grey) still reads as an arm. Not at the shoulder, where it joins the body.
         if (!far) {
-            seg(lerp(l.root, l.joint, 0.4f), l.joint, 6.2f + 2.4f, c.background)
-            seg(l.joint, l.end, 5.2f + 2.4f, c.background)
-            dot(l.end, 2.7f + 1.2f, c.background)
+            taper(lerp(l.root, l.joint, 0.4f), l.joint, 6.2f + 2.4f, 5.4f + 2.4f, c.background)
+            taper(l.joint, l.end, 5.4f + 2.4f, 3.8f + 2.4f, c.background)
+            dot(l.end, 2.9f + 1.2f, c.background)
         }
-        seg(l.root, l.joint, 6.2f, base)
-        seg(l.joint, l.end, 5.2f, base)
+        taper(l.root, l.joint, 7f, 5.4f, base)
+        taper(l.joint, l.end, 5.4f, 3.8f, base)
         heat(base, "Shoulders", dim)?.let { seg(l.root, lerp(l.root, l.joint, 0.3f), 6.2f, it) }
         if (front) {
             muscle(l.root, l.joint, 6.2f, 0f, 0.3f, 0.9f, heat(base, "Biceps", false) ?: heat(base, "Triceps", false))
@@ -408,17 +429,17 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
             muscle(l.root, l.joint, 6.2f, 1f, 0.3f, 0.9f, heat(base, "Biceps", dim))
             muscle(l.root, l.joint, 6.2f, -1f, 0.3f, 0.9f, heat(base, "Triceps", dim))
         }
-        heat(base, "Forearms", dim)?.let { seg(lerp(l.joint, l.end, 0.12f), lerp(l.joint, l.end, 0.75f), 3.4f, it) }
-        dot(l.end, 2.7f, base)
+        heat(base, "Forearms", dim)?.let { taper(lerp(l.joint, l.end, 0.12f), lerp(l.joint, l.end, 0.75f), 3.6f, 2.6f, it) }
+        dot(l.end, 2.9f, base)
     }
 
     fun leg(l: Limb, toe: Float, far: Boolean) {
         val base = if (far && !front) c.far else c.near
         val dim = far && !front
-        if (front) seg(l.end - dir(toe) * 1f, l.end + dir(toe) * 3.5f, 3.8f, base)
-        else seg(l.end - dir(toe) * 2f, l.end + dir(toe) * 6f, 3.8f, base)
-        seg(l.joint, l.end, 6.4f, base)
-        seg(l.root, l.joint, 8.6f, base)
+        if (front) taper(l.end - dir(toe) * 1f, l.end + dir(toe) * 3.5f, 4f, 3.4f, base)
+        else taper(l.end - dir(toe) * 2f, l.end + dir(toe) * 6.2f, 4.4f, 3.2f, base)
+        taper(l.joint, l.end, 6.6f, 4.2f, base)
+        taper(l.root, l.joint, 9.6f, 6.8f, base)
         if (front) {
             muscle(l.root, l.joint, 8.6f, 0f, 0f, 0.3f, heat(base, "Glutes", false))
             muscle(l.root, l.joint, 8.6f, 0f, 0.15f, 0.88f, heat(base, "Quads", false) ?: heat(base, "Hamstrings", false))
@@ -455,7 +476,21 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         dot(at, r * 0.22f, c.gear)
     }
 
-    if (f.floor) drawLine(c.floor, Offset(0f, k.top), Offset(size.width, k.top), 1.2f * k.scale)
+    if (f.floor) {
+        drawLine(c.floor, Offset(0f, k.top), Offset(size.width, k.top), 1.2f * k.scale)
+        val grounded = listOf(b.leg.end, b.farLeg.end, b.arm.end, b.farArm.end).filter { it.y < 9f }
+        if (grounded.isNotEmpty()) {
+            val left = grounded.minOf { it.x } - 7f
+            val right = grounded.maxOf { it.x } + 9f
+            val a = k.px(Offset(left, 0f))
+            val z = k.px(Offset(right, 0f))
+            drawOval(
+                c.floor.copy(alpha = c.floor.alpha * 0.45f),
+                Offset(min(a.x, z.x), a.y - 1.6f * k.scale),
+                Size(abs(z.x - a.x), 3.2f * k.scale)
+            )
+        }
+    }
     val parts = f.parts(b)
     parts.filter { !it.front }.forEach(::part)
     f.cable?.let { anchor ->
@@ -487,7 +522,7 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
     val tTop = b.shoulder - b.up * (if (front) 3f else 2.5f)
     if (front) {
         val across = Offset(b.up.y, -b.up.x)
-        seg(tHip, tTop, 15f, c.near)
+        taper(tHip, tTop, 14f, 17f, c.near)
         heat(c.near, "Chest", false)?.let { col ->
             listOf(1f, -1f).forEach { s -> seg(lerp(tHip, tTop, 0.62f) + across * (3.6f * s), lerp(tHip, tTop, 0.84f) + across * (3.6f * s), 6f, col) }
         }
@@ -496,12 +531,13 @@ private fun DrawScope.drawFigure(f: Figure, b: Body, k: Frame, c: Palette, loads
         }
         heat(c.near, "Core", false)?.let { seg(lerp(tHip, tTop, 0.08f), lerp(tHip, tTop, 0.48f), 5.5f, it) }
     } else {
-        seg(tHip, tTop, 12.5f, c.near)
+        dot(b.hip, 5.8f, c.near)
+        taper(tHip, tTop, 11.5f, 13.6f, c.near)
         muscle(tHip, tTop, 12.5f, -1f, 0.55f, 0.92f, heat(c.near, "Chest", false))
         muscle(tHip, tTop, 12.5f, 1f, 0.3f, 0.92f, heat(c.near, "Back", false))
         muscle(tHip, tTop, 12.5f, -1f, 0.08f, 0.5f, heat(c.near, "Core", false))
     }
-    seg(b.shoulder, b.head, 4.6f, c.near)
+    taper(b.shoulder, lerp(b.shoulder, b.head, 0.7f), 5.4f, 4.4f, c.near)
     dot(b.head, HEAD, c.near)
 
     if (front) {
