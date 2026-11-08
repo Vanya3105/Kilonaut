@@ -1056,6 +1056,7 @@ fun GymTrackerApp(
             )
         }
         ShareSheetHost()
+        CloudQuestionHost()
 
         val forgotten = activeSplit
         if (forgottenSince > 0L && forgotten != null) {

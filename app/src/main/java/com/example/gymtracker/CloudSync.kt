@@ -127,6 +127,34 @@ object CloudSync {
     var status by mutableStateOf(Status())
         private set
 
+    /**
+     * Something only the user can decide before this phone's first sync with an account; the sync
+     * waits until it's answered ([answer]).
+     */
+    sealed class Question {
+        /** This phone has its own plan and the account a different one. */
+        data class WhichPlan(val account: String, val phone: String) : Question()
+        /** This phone last synced with another account ([previous]) and has training. [canReplace]: all of it is saved there. */
+        data class OtherAccount(val previous: String, val current: String, val canReplace: Boolean) : Question()
+    }
+
+    var question by mutableStateOf<Question?>(null)
+        private set
+
+    /** The answer to [question]: "account" / "phone" for the plan, "merge" / "replace" for the other account. */
+    fun answer(context: Context, choice: String) {
+        val uid = signedInUid() ?: return
+        val key = if (question is Question.WhichPlan) "plan" else "account"
+        prefs(context).edit().putString("$uid.choice.$key", choice).apply()
+        question = null
+        request(context, now = true)
+    }
+
+    /** The question was turned down by signing out. */
+    fun dismissQuestion() {
+        question = null
+    }
+
     /** Bumped when the account's changes landed here, so open screens read the data again. */
     var applied by mutableIntStateOf(0)
         private set
@@ -227,8 +255,15 @@ object CloudSync {
                 }
             }
 
+            // 1b. On this phone's first sync with the account, what only the user can decide.
+            var incoming = remote
+            if (firstSync) {
+                val decided = decideFirstSync(context, uid, remote) ?: return false
+                incoming = decided
+            }
+
             // 2. Take it in.
-            val pulls = kinds.associate { k -> k.collection to pullPlan(k.local(context), remote.getValue(k.collection), synced.getValue(k.collection)) }
+            val pulls = kinds.associate { k -> k.collection to pullPlan(k.local(context), incoming.getValue(k.collection), synced.getValue(k.collection)) }
             pulls.forEach { (c, plan) -> synced[c] = plan.second }
             val landed = applyHere(context, pulls.mapValues { it.value.first }, firstSync)
             if (landed) {
@@ -260,7 +295,10 @@ object CloudSync {
             }
 
             val now = System.currentTimeMillis()
-            p.edit().putLong("$uid.lastPull", newest).putLong("$uid.lastSyncAt", now).apply()
+            // Which account this phone's data now belongs to, for the next sign-in with a different one.
+            val email = try { FirebaseAuth.getInstance().currentUser?.email } catch (_: Exception) { null }
+            p.edit().putLong("$uid.lastPull", newest).putLong("$uid.lastSyncAt", now)
+                .putString("lastUid", uid).putString("lastEmail", email).apply()
             main.post {
                 status = Status(lastSyncAt = now)
                 if (landed) applied++
@@ -272,6 +310,83 @@ object CloudSync {
             main.post { status = status.copy(running = false, error = message) }
             return false
         }
+    }
+
+    /**
+     * The account's documents to take in on this phone's first sync, after the user's choices, or
+     * null when a question is now waiting (the sync stops until it's answered).
+     */
+    private fun decideFirstSync(context: Context, uid: String, remote: Map<String, List<RemoteDoc>>): Map<String, List<RemoteDoc>>? {
+        val p = prefs(context)
+        val localWorkouts = workouts.local(context)
+        val localWeights = weighIns.local(context)
+
+        // Training from a different account on this phone: add it to this one, or swap it for this one's.
+        // Phones that synced before this was recorded (beta 1) still have that account's sync records.
+        val lastUid = p.getString("lastUid", null)
+            ?: p.all.keys.firstOrNull { it.endsWith(".workouts") && !it.startsWith("$uid.") }?.removeSuffix(".workouts")
+        var replaced = false
+        if (lastUid != null && lastUid != uid && (localWorkouts.isNotEmpty() || localWeights.isNotEmpty())) {
+            when (p.getString("$uid.choice.account", null)) {
+                null -> {
+                    val canReplace = pushPlan(localWorkouts, readHashes(p.getString("$lastUid.workouts", null))).first.isEmpty() &&
+                        pushPlan(localWeights, readHashes(p.getString("$lastUid.weighins", null))).first.isEmpty()
+                    val previous = p.getString("lastEmail", null) ?: tr("another account")
+                    val current = try { FirebaseAuth.getInstance().currentUser?.email } catch (_: Exception) { null } ?: tr("this account")
+                    main.post { question = Question.OtherAccount(previous, current, canReplace); status = status.copy(running = false) }
+                    return null
+                }
+                "replace" -> {
+                    // All of it is saved in the other account (checked when asked): this phone starts again from this one.
+                    LocalStorage.applyCloud(
+                        context, emptyList(), localWorkouts.keys.mapNotNull { it.toLongOrNull() }.toSet(),
+                        emptyList(), localWeights.keys.mapNotNull { it.toLongOrNull() }.toSet(), null
+                    )
+                    // Forget what this phone synced with the other account: those records are gone from
+                    // here on purpose, and signing in to it again must merge, not send them as deletes.
+                    p.edit().apply {
+                        kinds.forEach { remove("$lastUid.${it.collection}") }
+                        remove("$lastUid.lastPull"); remove("$lastUid.lastSyncAt")
+                    }.apply()
+                    // Open screens read again even if the account turns out to be empty.
+                    main.post { applied++ }
+                    replaced = true
+                }
+            }
+        }
+
+        // Two different plans: keep the account's or this phone's. Workouts and weigh-ins merge either way.
+        val accountPlan = remote.getValue("state").firstOrNull { it.id == "plan" }?.payload ?: return remote
+        if (replaced || !LocalStorage.loadUserProfile(context).hasCompletedOnboarding) return remote
+        val phonePlan = LocalStorage.cloudPlan(context).toString()
+        if (planShape(accountPlan) == planShape(phonePlan)) return remote
+        return when (p.getString("$uid.choice.plan", null)) {
+            null -> {
+                main.post { question = Question.WhichPlan(planSummary(accountPlan), planSummary(phonePlan)); status = status.copy(running = false) }
+                null
+            }
+            // This phone's plan stays and goes up: the account's isn't taken in.
+            "phone" -> remote + ("state" to remote.getValue("state").filter { it.id != "plan" })
+            else -> remote
+        }
+    }
+
+    /** What makes two plans the same plan: the program and its days' exercises (not settings). */
+    private fun planShape(plan: String): String = try {
+        val o = JSONObject(plan)
+        o.optJSONObject("userProfile")?.optString("splitProgram").orEmpty() + "|" + o.opt("splitTemplates")?.toString().orEmpty()
+    } catch (_: Exception) {
+        plan
+    }
+
+    /** "Upper/Lower: Upper A, Legs A, Upper B, Legs B", from a plan's program. */
+    private fun planSummary(plan: String): String = try {
+        val o = JSONObject(plan)
+        val id = o.optJSONObject("userProfile")?.optString("splitProgram").orEmpty()
+        val program = StoreCodec.readData(o).programs.find { it.id == id } ?: programFor(id)
+        shown(program.name) + ": " + program.splits.joinToString(", ") { shown(it.title) }
+    } catch (_: Exception) {
+        tr("Your plan")
     }
 
     /** Stores what came from the account. True if anything changed here. */

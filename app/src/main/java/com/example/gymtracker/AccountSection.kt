@@ -125,6 +125,71 @@ fun AccountSection() {
     }
 }
 
+/**
+ * What only the user can decide on a phone's first sync with an account (which plan to keep;
+ * training from another account). Shown over the whole app; the sync waits for the answer.
+ */
+@Composable
+fun CloudQuestionHost() {
+    val q = CloudSync.question ?: return
+    val P = LocalPalette.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    @Composable
+    fun Choice(title: String, detail: String, onClick: () -> Unit) {
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(P.bgControl)
+                .pressable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Text(title, style = AppType.bodyStrong, color = P.textPrimary)
+            if (detail.isNotBlank()) Text(detail, style = AppType.caption, color = P.textSecondary)
+        }
+    }
+    AlertDialog(
+        onDismissRequest = {},
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        containerColor = P.bgElevated,
+        title = {
+            Text(
+                when (q) {
+                    is CloudSync.Question.WhichPlan -> tr("Which plan do you want to keep?")
+                    is CloudSync.Question.OtherAccount -> tr("Training from another account")
+                },
+                style = AppType.headline, color = P.textPrimary
+            )
+        },
+        text = {
+            Column {
+                when (q) {
+                    is CloudSync.Question.WhichPlan -> {
+                        Text(tr("Your account and this phone have different plans. Workouts and weigh-ins from both are kept either way."), style = AppType.body, color = P.textSecondary)
+                        Spacer(Modifier.height(12.dp))
+                        Choice(tr("The account's plan"), q.account) { CloudSync.answer(context, "account") }
+                        Choice(tr("This phone's plan"), q.phone) { CloudSync.answer(context, "phone") }
+                    }
+                    is CloudSync.Question.OtherAccount -> {
+                        Text(tr("The training on this phone is from {0}.", q.previous), style = AppType.body, color = P.textSecondary)
+                        Spacer(Modifier.height(12.dp))
+                        Choice(tr("Add it to this account"), tr("Both are kept, on this phone and in {0}.", q.current)) { CloudSync.answer(context, "merge") }
+                        if (q.canReplace) Choice(tr("Use only this account's training"), tr("The other stays saved in {0}.", q.previous)) {
+                            CloudSync.answer(context, "replace")
+                        } else Text(
+                            tr("Some of it isn't saved in {0} yet, so it can't be swapped out.", q.previous),
+                            style = AppType.caption, color = P.textTertiary, modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (q is CloudSync.Question.OtherAccount) TextButton(onClick = {
+                CloudSync.dismissQuestion()
+                scope.launch { Account.signOut(context) }
+            }) { Text(tr("Cancel and sign out"), color = P.textSecondary, style = AppType.label) }
+        }
+    )
+}
+
 /** Continue with Google and Use email. [primary]: Google is the screen's main button. */
 @Composable
 fun SignInChoices(primary: Boolean = false, enabled: Boolean = true) {
