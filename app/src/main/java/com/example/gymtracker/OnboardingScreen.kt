@@ -127,13 +127,10 @@ fun OnboardingScreen(
             modifier = Modifier.weight(1f),
             label = "onboarding_step"
         ) { s ->
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 32.dp)) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp)) {
                 if (s == 0) {
-                    Box(
-                        Modifier.size(56.dp).clip(CircleShape).background(P.accentSoft),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Rounded.FitnessCenter, null, tint = P.accentPrimary, modifier = Modifier.size(28.dp)) }
-                    Spacer(Modifier.height(20.dp))
+                    AboutYouHero(age, weightKg)
+                    Spacer(Modifier.height(16.dp))
                     Text(tr("Welcome"), style = AppType.display, color = P.textPrimary)
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -174,6 +171,8 @@ fun OnboardingScreen(
                         height = 56.dp
                     )
                 } else if (s == 1) {
+                    TrainingHero(experience, goal)
+                    Spacer(Modifier.height(16.dp))
                     Text(tr("Your training"), style = AppType.display, color = P.textPrimary)
                     Spacer(Modifier.height(6.dp))
                     Text(tr("So the app picks exercises, sets, reps and rest that suit you."), style = AppType.body, color = P.textSecondary)
@@ -190,6 +189,8 @@ fun OnboardingScreen(
                         OptionCard(g.label, g.detail, goal == g) { haptics.tick(); goal = g }
                     }
                 } else if (s == 2) {
+                    WeekHero(days, minutes, equipment)
+                    Spacer(Modifier.height(16.dp))
                     Text(tr("Your week"), style = AppType.display, color = P.textPrimary)
                     Spacer(Modifier.height(24.dp))
                     Text(tr("How many days a week can you train?"), style = AppType.label, color = P.textSecondary)
@@ -214,6 +215,8 @@ fun OnboardingScreen(
                         OptionCard(e.label, e.detail, equipment == e) { haptics.tick(); equipment = e }
                     }
                 } else if (s == 3) {
+                    BodyHero(skip, focus)
+                    Spacer(Modifier.height(16.dp))
                     Text(tr("Your body"), style = AppType.display, color = P.textPrimary)
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -243,6 +246,8 @@ fun OnboardingScreen(
                         color = P.textTertiary
                     )
                 } else {
+                    PlanHero(if (program == RECOMMENDED_PLAN_ID) plan ?: programFor(program) else programFor(program))
+                    Spacer(Modifier.height(16.dp))
                     Text(tr("Your plan"), style = AppType.display, color = P.textPrimary)
                     Spacer(Modifier.height(6.dp))
                     Text(tr("Made from your answers. You can pick another split or build your own, here or later in Profile."), style = AppType.body, color = P.textSecondary)
@@ -282,7 +287,7 @@ fun OnboardingScreen(
         )
         if (step == 0) {
             Text(
-                tr("Stored only on this phone."),
+                if (Account.user != null) tr("Saved to your account.") else tr("Stored only on this phone."),
                 style = AppType.caption.copy(fontWeight = FontWeight.Normal),
                 color = P.textTertiary,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 10.dp)
