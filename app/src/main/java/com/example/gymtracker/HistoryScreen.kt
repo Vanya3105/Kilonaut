@@ -144,7 +144,10 @@ private fun WeekView(
 ) {
     val P = LocalPalette.current
     val rtl = isRtl()
-    var weekOffset by rememberSaveable { mutableIntStateOf(0) }
+    var weekOffset by rememberSaveable {
+        val empty = computeWeekSummary(history, 0, userProfile.splitProgram).workouts.isEmpty()
+        mutableIntStateOf(if (empty && computeWeekSummary(history, -1, userProfile.splitProgram).workouts.isNotEmpty()) -1 else 0)
+    }
     val program = programFor(userProfile.splitProgram)
     val week = remember(history, weekOffset, program) { computeWeekSummary(history, weekOffset, userProfile.splitProgram) }
     val stats = remember(week) { week.workouts.map { computeWorkoutStats(it.exercises, emptyList()) } }

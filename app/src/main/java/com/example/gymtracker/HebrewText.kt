@@ -1568,6 +1568,8 @@ internal object HebrewText {
         m["Couldn't sync. It'll try again later."] = "הסנכרון לא הצליח. ננסה שוב מאוחר יותר."
         m["No connection. It'll sync when you're online."] = "אין חיבור. הסנכרון יקרה כשתהיו מחוברים."
         m["Sync now"] = "סנכרון עכשיו"
+        m["Connect Google Drive"] = "חיבור ל־Google Drive"
+        m["Sign in to have it on any phone"] = "היכנסו כדי שיהיו בכל טלפון"
         m["Chest, shoulders, triceps"] = "חזה, כתפיים, יד אחורית"
         m["Continue with email"] = "המשך עם אימייל"
         m["Every rep counted."] = "כל חזרה נספרת."

@@ -106,8 +106,12 @@ class TipTour internal constructor(val id: String, val steps: List<TutorialStepI
 fun rememberTipTour(id: String, steps: List<TutorialStepInfo>, ready: Boolean = true): TipTour {
     val context = LocalContext.current
     val tour = remember(id, TutorialPrefs.replayGeneration) { TipTour(id, steps, startActive = false) }
-    LaunchedEffect(tour, ready) {
-        if (ready && !tour.active && !TutorialPrefs.hasSeen(context, id)) {
+    // A system dialog (the notification question on the first workout) pauses the app: wait for it,
+    // so the tour doesn't open under it.
+    val resumed = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle.currentStateFlow
+        .collectAsState().value.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+    LaunchedEffect(tour, ready, resumed) {
+        if (ready && resumed && !tour.active && !TutorialPrefs.hasSeen(context, id)) {
             // Let the screen settle (enter animations, first layout) before dimming it.
             delay(450)
             tour.index = 0

@@ -7,6 +7,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Email
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.foundation.background
@@ -196,27 +198,24 @@ fun SignInSheet(onDismiss: () -> Unit) {
     }
 }
 
-/** Today's nudge to sign in, until signed in or "Not now". */
+/** Today's nudge to sign in: one row (tap to sign in, × for not now), until signed in. */
 @Composable
 fun AccountCard(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val P = LocalPalette.current
     var signingIn by remember { mutableStateOf(false) }
-    AppCard(modifier.fillMaxWidth()) {
+    AppCard(modifier.fillMaxWidth(), onClick = { signingIn = true }, contentPadding = PaddingValues(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.AccountCircle, null, tint = P.textSecondary, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(tr("Keep your training safe"), style = AppType.bodyStrong, color = P.textPrimary)
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(tr("Sign in and it's saved to your account, so a new phone picks up where this one left off."), style = AppType.body, color = P.textSecondary)
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SecondaryButton(tr("Sign in"), { signingIn = true })
-            Spacer(Modifier.width(8.dp))
-            Text(
-                tr("Not now"), style = AppType.label, color = P.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable(onClick = onDismiss).padding(horizontal = 12.dp, vertical = 12.dp)
-            )
+            Box(Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape).background(P.accentSoft), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.CloudUpload, null, tint = P.accentPrimary, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(tr("Keep your training safe"), style = AppType.bodyStrong, color = P.textPrimary)
+                Text(tr("Sign in to have it on any phone"), style = AppType.caption, color = P.textSecondary)
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Rounded.Close, tr("Not now"), tint = P.textTertiary, modifier = Modifier.size(20.dp))
+            }
         }
     }
     if (signingIn) SignInSheet(onDismiss = { signingIn = false })

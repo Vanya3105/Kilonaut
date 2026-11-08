@@ -1393,7 +1393,7 @@ private fun BackupsSection(onRestoreContent: (String) -> Unit, onRestoreFile: ()
 
     // Actions
     if (!drive.signedIn) {
-        PrimaryButton(if (signingIn) tr("Signing in…") else tr("Sign in with Google"), { signIn() }, Modifier.fillMaxWidth(), enabled = !signingIn, height = 48.dp)
+        PrimaryButton(if (signingIn) tr("Signing in…") else tr("Connect Google Drive"), { signIn() }, Modifier.fillMaxWidth(), enabled = !signingIn, height = 48.dp)
         Spacer(Modifier.height(10.dp))
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
