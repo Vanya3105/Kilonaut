@@ -217,6 +217,12 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
         else Feed.Post("preview", me, System.currentTimeMillis(), text.trim(), photo, w, emptyList(), 0)
     }
 
+    // Posting means agreeing to the rules (from the finish screen too, which skips the feed).
+    remember { CommunityRules.load(context) }
+    if (CommunityRules.agreed == false) {
+        FullPage(tr("New post"), onClose = onClose) { CommunityRulesGate() }
+        return
+    }
     FullPage(
         tr("New post"), onClose = leave,
         actions = {

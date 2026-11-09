@@ -171,6 +171,12 @@ fun FriendsSection() {
         HandlePicker(user.name.orEmpty(), suggestion = user.name ?: user.email?.substringBefore('@') ?: "")
         return
     }
+    // A username from before there were rules: agree to them first.
+    remember { CommunityRules.load(context) }
+    if (CommunityRules.agreed == false) {
+        CommunityRulesGate()
+        return
+    }
     val me = Friends.Person(user.uid, user.name.orEmpty(), handle)
     val c = Friends.circle
 
@@ -351,13 +357,15 @@ private fun HandlePicker(name: String, suggestion: String) {
     var text by remember { mutableStateOf(cleanHandle(suggestion).filter { it.isLetterOrDigit() || it == '_' || it == '.' }.take(20)) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var agreed by remember { mutableStateOf(false) }
     val save = {
-        if (!busy && isValidHandle(text)) {
+        if (!busy && isValidHandle(text) && agreed) {
             busy = true
             scope.launch {
                 error = Friends.claimHandle(text, name)
                 busy = false
-                if (error == null) Friends.refresh()
+                if (error == null) { CommunityRules.agree(context); Friends.refresh() }
             }
         }
     }
@@ -386,8 +394,13 @@ private fun HandlePicker(name: String, suggestion: String) {
             style = AppType.caption, color = if (error != null) P.dangerText else P.textTertiary,
             modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 4.dp)
         )
+        Spacer(Modifier.height(18.dp))
+        Text(tr("Community rules"), style = AppType.bodyStrong, color = P.textPrimary, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+        CommunityRulesList()
+        Spacer(Modifier.height(12.dp))
+        AgreeToRules(agreed) { agreed = it }
         Spacer(Modifier.height(14.dp))
-        PrimaryButton(if (busy) tr("Saving…") else tr("Save"), { save() }, Modifier.fillMaxWidth(), enabled = !busy && isValidHandle(text))
+        PrimaryButton(if (busy) tr("Saving…") else tr("Save"), { save() }, Modifier.fillMaxWidth(), enabled = !busy && isValidHandle(text) && agreed)
     }
 }
 

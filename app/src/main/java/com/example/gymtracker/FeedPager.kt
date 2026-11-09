@@ -106,7 +106,8 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
     }
     val posts = Feed.posts
     val handle = Friends.myHandle
-    val showingPosts = (Feed.demo || (user != null && handle != null)) && !posts.isNullOrEmpty()
+    remember { CommunityRules.load(context) }
+    val showingPosts = (Feed.demo || (user != null && handle != null && CommunityRules.agreed == true)) && !posts.isNullOrEmpty()
     SideEffect { Feed.fullBleed = showingPosts }
     val debuggable = remember { (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
 
@@ -129,6 +130,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
             handle == null -> FeedEmpty(Icons.Rounded.PersonAdd, tr("Set up Friends"), tr("Pick a username so friends can find you. Then their workouts show up here.")) {
                 PrimaryButton(tr("Pick a username"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
+            CommunityRules.agreed == false -> CommunityRulesGate(Modifier.statusBarsPadding().padding(top = 70.dp))
             posts == null -> FeedLoading()
             posts.isEmpty() -> {
                 val last = history.maxByOrNull { it.id }
