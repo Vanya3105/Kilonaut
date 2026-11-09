@@ -224,7 +224,12 @@ object Friends {
     }
 
     /** Blocks [other]: ends every follow between you, and the rules keep them from following you again. */
-    suspend fun block(other: String): Boolean = change { db, uid ->
+    suspend fun block(other: String): Boolean = blockNow(other).also { ok ->
+        // Wherever it was done from, their posts leave what's showing.
+        if (ok) withContext(Dispatchers.Main) { Feed.forget(other) }
+    }
+
+    private suspend fun blockNow(other: String): Boolean = change { db, uid ->
         val me = db.collection("users").document(uid)
         val them = db.collection("users").document(other)
         db.batch()

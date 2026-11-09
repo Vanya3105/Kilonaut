@@ -108,7 +108,7 @@ fun BlockDialog(person: Friends.Person, onDismiss: () -> Unit, onBlocked: () -> 
                     val ok = Friends.block(person.uid)
                     busy = false
                     onDismiss()
-                    if (ok) { onBlocked(); Feed.forget(person.uid); AppSnackbar.show(tr("Blocked.")) } else AppSnackbar.show(tr("Couldn't do that. Check your connection."))
+                    if (ok) { onBlocked(); AppSnackbar.show(tr("Blocked.")) } else AppSnackbar.show(tr("Couldn't do that. Check your connection."))
                 }
             }) { Text(if (busy) tr("Blocking…") else tr("Block"), color = P.dangerText, style = AppType.label) }
         },
