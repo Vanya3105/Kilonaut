@@ -37,9 +37,10 @@ service cloud.firestore {
     // Name and username, so people can find each other.
     match /profiles/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && me() == uid
+      allow create, update: if signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['name', 'handle'])
         && request.resource.data.name is string && request.resource.data.name.size() <= 60;
+      allow delete: if signedIn() && me() == uid;
     }
 
     // Usernames: first come, first served; only the holder can let one go.

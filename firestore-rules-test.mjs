@@ -44,6 +44,9 @@ await t('alice removes carol follow', writeBatch(A).delete(doc(A, 'users/alice/f
 await t('carol deletes alice following bob', deleteDoc(doc(C, 'users/alice/following/bob')), false);
 await t('bob unfollows', writeBatch(B).delete(doc(B, 'users/bob/following/alice')).delete(doc(B, 'users/alice/followers/bob')).commit(), true);
 await t('after unfollow bob cannot read stats', getDoc(doc(B, 'users/alice/public/stats')), false);
+await t('bob deletes alice profile', deleteDoc(doc(B, 'profiles/alice')), false);
+await t('alice deletes own profile', deleteDoc(doc(A, 'profiles/alice')), true);
+await t('alice deletes own stats', deleteDoc(doc(A, 'users/alice/public/stats')), true);
 await t('follow self', setDoc(doc(A, 'users/alice/following/alice'), { uid: 'alice' }), false);
 console.log(`${n - bad}/${n} rule checks passed`);
 await env.cleanup();
