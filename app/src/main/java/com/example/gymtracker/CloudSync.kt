@@ -294,6 +294,8 @@ object CloudSync {
                 p.edit().putString("$uid.${k.collection}", writeHashes(after)).apply()
             }
 
+            Friends.publish(context, uid)
+
             val now = System.currentTimeMillis()
             // Which account this phone's data now belongs to, for the next sign-in with a different one.
             val email = try { FirebaseAuth.getInstance().currentUser?.email } catch (_: Exception) { null }

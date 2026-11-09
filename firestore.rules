@@ -1,14 +1,53 @@
 rules_version = '2';
 
-// Kilonaut's cloud copy (CloudSync.kt). Each person can read and write only their own data,
-// under users/{their uid}; nothing else in the database is reachable from the app.
+// Kilonaut's cloud (CloudSync.kt, Friends.kt). Your training is yours alone; friends (people who
+// follow each other) can read each other's summary stats and nothing else.
 // Paste into Firebase console → Firestore Database → Rules → Publish.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function follows(a, b) { return exists(/databases/$(database)/documents/users/$(a)/following/$(b)); }
+
+    // Workouts, weigh-ins and the plan: only the owner.
     match /users/{uid}/{collection}/{doc} {
-      allow read, write: if request.auth != null
-        && request.auth.uid == uid
-        && collection in ['workouts', 'weighins', 'state'];
+      allow read, write: if signedIn() && me() == uid && collection in ['workouts', 'weighins', 'state'];
+    }
+
+    // Who you follow: you add and remove it; the person you follow can see it and remove it (declining).
+    match /users/{uid}/following/{other} {
+      allow read: if signedIn() && (me() == uid || me() == other);
+      allow create: if signedIn() && me() == uid && other != uid && request.resource.data.uid == other;
+      allow delete: if signedIn() && (me() == uid || me() == other);
+    }
+
+    // Your followers: each follower writes their own entry here when they follow you.
+    match /users/{uid}/followers/{other} {
+      allow read: if signedIn() && (me() == uid || me() == other);
+      allow create: if signedIn() && me() == other && other != uid && request.resource.data.uid == other;
+      allow delete: if signedIn() && (me() == uid || me() == other);
+    }
+
+    // What friends see: written by you, read by you and by people you follow who follow you back.
+    match /users/{uid}/public/{doc} {
+      allow write: if signedIn() && me() == uid && doc == 'stats';
+      allow read: if signedIn() && (me() == uid || (follows(uid, me()) && follows(me(), uid)));
+    }
+
+    // Name and username, so people can find each other.
+    match /profiles/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['name', 'handle'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60;
+    }
+
+    // Usernames: first come, first served; only the holder can let one go.
+    match /handles/{handle} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me() && handle.matches('^[a-z0-9_.]{3,20}$');
+      allow update: if signedIn() && resource.data.uid == me() && request.resource.data.uid == me();
+      allow delete: if signedIn() && resource.data.uid == me();
     }
   }
 }

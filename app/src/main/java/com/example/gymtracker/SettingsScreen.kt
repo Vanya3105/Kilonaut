@@ -47,6 +47,7 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -191,6 +192,7 @@ fun SettingsScreen(
     fun PageContent(p: SettingsPage) {
         when (p) {
             SettingsPage.ACCOUNT -> SettingsGroup(tr("Account")) { AccountSection() }
+            SettingsPage.FRIENDS -> FriendsSection()
             SettingsPage.SPLIT -> {
                 SettingsGroup(tr("Training split")) {
                     val current = programFor(userProfile.splitProgram)
@@ -382,6 +384,8 @@ fun SettingsScreen(
 
         item { ProfileStats(history, programFor(userProfile.splitProgram).weeklyGoal) }
 
+        if (Account.available(context)) item { FriendsCard(onOpen = { page = SettingsPage.FRIENDS }) }
+
         item {
             SettingsGroup(tr("Your training")) {
                 val p = userProfile
@@ -445,7 +449,7 @@ fun SettingsScreen(
 
         item {
             SettingsGroup(tr("Settings"), padding = PaddingValues(vertical = 4.dp)) {
-                val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT && it != SettingsPage.SPLIT }
+                val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT && it != SettingsPage.SPLIT && it != SettingsPage.FRIENDS }
                 pages.forEachIndexed { i, entry ->
                     if (i > 0) Box(Modifier.padding(start = 52.dp).fillMaxWidth().height(1.dp).background(P.borderSubtle))
                     SettingsRow(entry.icon, entry.title, danger = false) {
@@ -926,6 +930,7 @@ private fun SettingsGroup(title: String, padding: PaddingValues = PaddingValues(
 /** The settings, each a row on Profile that opens its own page. */
 enum class SettingsPage(val icon: ImageVector) {
     ACCOUNT(Icons.Rounded.AccountCircle),
+    FRIENDS(Icons.Rounded.Group),
     SPLIT(Icons.Rounded.CalendarMonth),
     WORKOUTS(Icons.Rounded.FitnessCenter),
     REMINDERS(Icons.Rounded.Notifications),
@@ -940,6 +945,7 @@ enum class SettingsPage(val icon: ImageVector) {
 
     val title: String get() = when (this) {
         ACCOUNT -> tr("Account")
+        FRIENDS -> tr("Friends")
         SPLIT -> tr("Training split")
         WORKOUTS -> tr("Workouts")
         REMINDERS -> tr("Reminders")
