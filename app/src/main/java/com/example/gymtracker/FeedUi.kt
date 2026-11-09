@@ -41,6 +41,8 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Schedule
@@ -201,14 +203,25 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
             }
         }
     }
+    val choosePhoto = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val canPost = !busy && (text.isNotBlank() || photo != null || workout != null)
-    val me = Friends.Person(Feed.me().orEmpty(), Account.user?.name.orEmpty(), Friends.myHandle.orEmpty())
+    // Leaving with something written or attached asks first: one Back press shouldn't lose a post.
+    var confirmDiscard by remember { mutableStateOf(false) }
+    val leave = { if (text.isNotBlank() || photo != null || (workout != null && workout != start)) confirmDiscard = true else onClose() }
+    val me = Friends.Person(Feed.me() ?: "demo-me", Account.user?.name.orEmpty(), Friends.myHandle ?: if (Feed.demo) "you" else "")
+    // What the post will look like, rebuilt as it changes.
+    val preview = remember(text, photo, workout) {
+        val w = workout?.let { parseWorkoutPost(workoutPostJson(it, history.filter { h -> h.id < it.id }).toString()) }
+        if (text.isBlank() && photo == null && w == null) null
+        else Feed.Post("preview", me, System.currentTimeMillis(), text.trim(), photo, w, emptyList(), 0)
+    }
 
     FullPage(
-        tr("New post"), onClose = onClose,
+        tr("New post"), onClose = leave,
         actions = {
+            val bg by androidx.compose.animation.animateColorAsState(if (canPost) P.accentPrimary else P.bgControl, label = "post_bg")
             Box(
-                Modifier.clip(RoundedCornerShape(50)).background(if (canPost) P.accentPrimary else P.bgControl)
+                Modifier.clip(RoundedCornerShape(50)).background(bg)
                     .pressable(enabled = canPost) {
                         busy = true
                         scope.launch {
@@ -217,76 +230,166 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
                             if (error == null) { AppSnackbar.show(tr("Posted.")); onClose() } else AppSnackbar.show(error)
                         }
                     }
-                    .padding(horizontal = 18.dp, vertical = 9.dp)
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
             ) { Text(if (busy) tr("Posting…") else tr("Post"), style = AppType.label, color = if (canPost) P.onAccentPrimary else P.textTertiary) }
-        },
-        bottomBar = {
-            Row(Modifier.fillMaxWidth().background(P.bgCard).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AttachChip(Icons.Rounded.Image, if (photo == null) tr("Photo") else tr("Change photo")) {
-                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }
-                if (history.isNotEmpty()) AttachChip(Icons.Rounded.FitnessCenter, if (workout == null) tr("Workout") else tr("Change workout")) { picking = true }
-            }
         }
     ) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 6.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            // You, and the words.
             Row(verticalAlignment = Alignment.Top) {
-                PersonAvatar(me, 40.dp, image = ProfilePhoto.mine)
+                PersonAvatar(me, 44.dp, image = ProfilePhoto.mine)
                 Spacer(Modifier.width(12.dp))
-                Box(Modifier.weight(1f).padding(top = 8.dp)) {
-                    if (text.isEmpty()) Text(tr("How did it go?"), style = AppType.body, color = P.textTertiary)
-                    BasicTextField(
-                        value = text, onValueChange = { text = it.take(1000) },
-                        textStyle = AppType.body.copy(color = P.textPrimary), cursorBrush = SolidColor(P.accentPrimary),
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(me.title(), style = AppType.label, color = P.textSecondary)
+                    Box(Modifier.padding(top = 4.dp)) {
+                        if (text.isEmpty()) Text(tr("How did it go?"), style = AppType.title, color = P.textTertiary)
+                        BasicTextField(
+                            value = text, onValueChange = { text = it.take(1000) },
+                            textStyle = AppType.title.copy(color = P.textPrimary), cursorBrush = SolidColor(P.accentPrimary),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                        )
+                    }
+                    if (text.length > 800) Text("${text.length}/1000", style = AppType.caption, color = if (text.length >= 1000) P.dangerText else P.textTertiary)
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+
+            // What's attached, or two big ways to attach something.
+            if (photo == null && workout == null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AttachTile(
+                        Icons.Rounded.Image, if (loadingPhoto) tr("Loading…") else tr("Add a photo"), tr("From your gallery"),
+                        Modifier.weight(1f), enabled = !loadingPhoto, onClick = choosePhoto
                     )
+                    AttachTile(
+                        Icons.Rounded.FitnessCenter, tr("Share a workout"),
+                        if (history.isEmpty()) tr("No workouts yet") else tr("One of your recent ones"),
+                        Modifier.weight(1f), enabled = history.isNotEmpty()
+                    ) { picking = true }
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (photo == null) AttachChip(Icons.Rounded.Image, tr("Add a photo"), choosePhoto)
+                    else AttachChip(Icons.Rounded.Image, tr("Change photo"), choosePhoto)
+                    if (history.isNotEmpty()) AttachChip(Icons.Rounded.FitnessCenter, if (workout == null) tr("Add a workout") else tr("Change workout")) { picking = true }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (photo != null) RemovableTag(Icons.Rounded.Image, tr("Photo")) { photo = null }
+                    workout?.let { w -> RemovableTag(Icons.Rounded.FitnessCenter, shown(w.splitTitle)) { workout = null } }
                 }
             }
-            if (loadingPhoto) Text(tr("Loading…"), style = AppType.caption, color = P.textSecondary, modifier = Modifier.padding(top = 12.dp))
-            Feed.image(photo)?.let { img ->
-                Spacer(Modifier.height(14.dp))
-                Box {
-                    Image(
-                        img, null,
-                        Modifier.fillMaxWidth().aspectRatio((img.width.toFloat() / img.height).coerceIn(0.8f, 1.9f)).clip(RoundedCornerShape(18.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    RemoveBadge(Modifier.align(Alignment.TopEnd).padding(10.dp)) { photo = null }
+
+            // The preview: the post as a small feed page.
+            AnimatedVisibility(preview != null, enter = fadeIn() + scaleIn(initialScale = 0.92f), exit = fadeOut() + scaleOut(targetScale = 0.92f)) {
+                Column(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(tr("Preview"), style = AppType.overline, color = P.textTertiary)
+                    Spacer(Modifier.height(10.dp))
+                    preview?.let { MiniFeedPage(it) }
                 }
             }
-            workout?.let { w ->
-                Spacer(Modifier.height(14.dp))
-                val preview = remember(w.id) { parseWorkoutPost(workoutPostJson(w, history.filter { it.id < w.id }).toString()) }
-                if (preview != null) Box {
-                    Box(Modifier.padding(horizontal = (-14).dp)) { WorkoutBlock(preview, full = false) }
-                    RemoveBadge(Modifier.align(Alignment.TopEnd).padding(8.dp)) { workout = null }
-                }
+
+            Spacer(Modifier.height(20.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Lock, null, tint = P.textTertiary, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(tr("Only your friends see your posts."), style = AppType.caption, color = P.textTertiary)
             }
-            Spacer(Modifier.height(16.dp))
-            Text(tr("Only your friends see your posts."), style = AppType.caption, color = P.textTertiary)
         }
     }
+
+    if (confirmDiscard) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { confirmDiscard = false },
+        containerColor = P.bgElevated,
+        title = { Text(tr("Discard this post?"), style = AppType.headline, color = P.textPrimary) },
+        text = { Text(tr("What you wrote and attached won't be kept."), style = AppType.body, color = P.textSecondary) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { confirmDiscard = false; onClose() }) { Text(tr("Discard"), color = P.dangerText, style = AppType.label) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDiscard = false }) { Text(tr("Keep editing"), color = P.textPrimary, style = AppType.label) } }
+    )
 
     if (picking) AppBottomSheet(onDismiss = { picking = false }) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text(tr("Pick a workout"), style = AppType.title, color = P.textPrimary)
             Spacer(Modifier.height(10.dp))
             history.sortedByDescending { it.id }.take(12).forEach { w ->
+                val selected = workout?.id == w.id
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).pressable { workout = w; picking = false }.padding(horizontal = 6.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(16.dp))
+                        .background(if (selected) P.accentSoft else Color.Transparent)
+                        .pressable { workout = w; picking = false }.padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (selected) P.accentPrimary else P.bgControl), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.FitnessCenter, null, tint = if (selected) P.onAccentPrimary else P.textSecondary, modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(shown(w.splitTitle), style = AppType.bodyStrong, color = P.textPrimary)
                         Text(
-                            listOf(relativeDay(w.id), formatDuration(w.durationSeconds)).joinToString(" · "),
+                            listOfNotNull(relativeDay(w.id).replaceFirstChar { it.uppercase() }, formatDuration(w.durationSeconds), formatVolume(w.totalVolumeKg).takeIf { w.totalVolumeKg > 0 }).joinToString(" · "),
                             style = AppType.caption, color = P.textSecondary
                         )
                     }
-                    if (workout?.id == w.id) Icon(Icons.Rounded.Check, null, tint = P.accentPrimary)
+                    if (selected) Icon(Icons.Rounded.Check, null, tint = P.accentPrimary)
                 }
             }
+        }
+    }
+}
+
+/** A post as it will look in the feed, at about half size, in a phone-shaped frame. */
+@Composable
+private fun MiniFeedPage(post: Feed.Post) {
+    val P = LocalPalette.current
+    val full = androidx.compose.ui.unit.DpSize(380.dp, 720.dp)
+    val scale = 0.5f
+    Box(
+        Modifier.size(full.width * scale, full.height * scale).clip(RoundedCornerShape(26.dp))
+            .border(6.dp, P.textPrimary.copy(alpha = 0.9f), RoundedCornerShape(26.dp)).background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(Modifier.requiredSize(full).graphicsLayer { scaleX = scale; scaleY = scale }) {
+            PostPage(post, Feed.people, current = true, onComments = {}, onWorkout = {}, onPerson = {})
+        }
+    }
+}
+
+@Composable
+private fun AttachTile(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    val P = LocalPalette.current
+    Column(
+        modifier.height(132.dp).clip(RoundedCornerShape(20.dp)).background(P.bgCard)
+            .border(1.5.dp, P.borderStrong, RoundedCornerShape(20.dp))
+            .pressable(enabled = enabled, onClick = onClick).padding(14.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.5f },
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(P.accentSoft), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = P.accentPrimary, modifier = Modifier.size(22.dp))
+        }
+        Column {
+            Text(title, style = AppType.bodyStrong, color = P.textPrimary)
+            Text(detail, style = AppType.caption, color = P.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun RemovableTag(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onRemove: () -> Unit) {
+    val P = LocalPalette.current
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).background(P.accentSoft).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = P.accentPrimary, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = AppType.label, color = P.accentPrimary, maxLines = 1)
+        Spacer(Modifier.width(4.dp))
+        Box(Modifier.size(26.dp).clip(CircleShape).pressable(onClick = onRemove), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Close, tr("Remove"), tint = P.accentPrimary, modifier = Modifier.size(16.dp))
         }
     }
 }

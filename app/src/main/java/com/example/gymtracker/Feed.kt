@@ -187,22 +187,7 @@ object Feed {
             val docs: List<Pair<Friends.Person, DocumentSnapshot>> = queries.flatMap { (a, q) ->
                 runCatching { q.waitFor().documents.map { a to it } }.getOrDefault(emptyList())
             }.sortedByDescending { it.second.getTimestamp("createdAt")?.toDate()?.time ?: 0L }.take(40)
-            val extras = docs.map { (author, d) ->
-                Triple(author to d, d.reference.collection("likes").get(Source.SERVER), d.reference.collection("comments").count().get(AggregateSource.SERVER))
-            }
-            val list = extras.map { (post, likesTask, countTask) ->
-                val (author, d) = post
-                Post(
-                    id = d.id,
-                    author = author,
-                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
-                    text = d.getString("text").orEmpty(),
-                    photo = d.getString("photo"),
-                    workout = parseWorkoutPost(d.getString("workout")),
-                    likes = runCatching { likesTask.waitFor().documents.map { it.id } }.getOrDefault(emptyList()),
-                    comments = runCatching { countTask.waitFor().count.toInt() }.getOrDefault(0)
-                )
-            }
+            val list = build(docs)
             withContext(Dispatchers.Main) {
                 posts = list
                 people = authors.associateBy { it.uid }
@@ -215,8 +200,60 @@ object Feed {
         }
     }
 
+    /** Post documents → posts, with their likes and comment counts (all fetched at once). */
+    private fun build(docs: List<Pair<Friends.Person, DocumentSnapshot>>): List<Post> {
+        val extras = docs.map { (author, d) ->
+            Triple(author to d, d.reference.collection("likes").get(Source.SERVER), d.reference.collection("comments").count().get(AggregateSource.SERVER))
+        }
+        return extras.map { (post, likesTask, countTask) ->
+            val (author, d) = post
+            Post(
+                id = d.id,
+                author = author,
+                createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                text = d.getString("text").orEmpty(),
+                photo = d.getString("photo"),
+                workout = parseWorkoutPost(d.getString("workout")),
+                likes = runCatching { likesTask.waitFor().documents.map { it.id } }.getOrDefault(emptyList()),
+                comments = runCatching { countTask.waitFor().count.toInt() }.getOrDefault(0)
+            )
+        }
+    }
+
+    /** One person's posts for their page, newest first; null if they can't be read (not friends). */
+    var personPosts by mutableStateOf<List<Post>?>(null)
+        private set
+
+    suspend fun loadPostsBy(person: Friends.Person): List<Post>? = withContext(Dispatchers.IO) {
+        val list = if (demo) posts.orEmpty().filter { it.author.uid == person.uid } else try {
+            build(posts(person.uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(30).get(Source.SERVER).waitFor().documents.map { person to it })
+        } catch (_: Exception) {
+            null
+        }
+        withContext(Dispatchers.Main) { personPosts = list }
+        list
+    }
+
+    fun clearPersonPosts() {
+        personPosts = null
+    }
+
+    /** Changes one post wherever it's shown (the feed and a person's page). */
+    private fun change(post: Post, update: (Post) -> Post) {
+        fun List<Post>.apply() = map { if (it.id == post.id && it.author.uid == post.author.uid) update(it) else it }
+        posts = posts?.apply()
+        personPosts = personPosts?.apply()
+    }
+
     /** Posts [text], [photo] (as stored) and/or [workout]. Null when done, else why not. */
     suspend fun publish(context: Context, text: String, photo: String?, workout: CompletedWorkout?): String? = withContext(Dispatchers.IO) {
+        if (demo) {
+            // The sample feed: the post goes on top here only.
+            val w = workout?.let { parseWorkoutPost(workoutPostJson(it, LocalStorage.loadHistory(context).filter { h -> h.id < it.id }).toString()) }
+            val me = Friends.Person("demo-me", Account.user?.name.orEmpty(), "you")
+            withContext(Dispatchers.Main) { posts = listOf(Post("local${System.nanoTime()}", me, System.currentTimeMillis(), text.trim(), photo, w, emptyList(), 0)) + posts.orEmpty() }
+            return@withContext null
+        }
         val uid = me() ?: return@withContext tr("Sign in first.")
         if (Friends.myHandle == null && Friends.loadMe(context) == null) return@withContext tr("Pick a username in Friends first.")
         val data = HashMap<String, Any>()
@@ -245,7 +282,10 @@ object Feed {
             ref.collection("likes").get(Source.SERVER).waitFor().documents.forEach { batch.delete(it.reference) }
             ref.collection("comments").get(Source.SERVER).waitFor().documents.forEach { batch.delete(it.reference) }
             batch.delete(ref).commit().waitFor()
-            withContext(Dispatchers.Main) { posts = posts?.filter { it.id != post.id } }
+            withContext(Dispatchers.Main) {
+                posts = posts?.filter { it.id != post.id }
+                personPosts = personPosts?.filter { it.id != post.id }
+            }
             true
         } catch (_: Exception) {
             false
@@ -255,13 +295,11 @@ object Feed {
     /** Likes or unlikes; the feed shows it at once and goes back if it fails. */
     suspend fun like(post: Post, on: Boolean): Boolean {
         if (demo) {
-            posts = posts?.map { if (it.id == post.id) it.copy(likes = if (on) it.likes + "demo-me" else it.likes - "demo-me") else it }
+            change(post) { it.copy(likes = if (on) it.likes - "demo-me" + "demo-me" else it.likes - "demo-me") }
             return true
         }
         val uid = me() ?: return false
-        fun update(change: (List<String>) -> List<String>) {
-            posts = posts?.map { if (it.id == post.id && it.author.uid == post.author.uid) it.copy(likes = change(it.likes)) else it }
-        }
+        fun update(edit: (List<String>) -> List<String>) = change(post) { it.copy(likes = edit(it.likes)) }
         update { if (on) (it - uid) + uid else it - uid }
         val ok = withContext(Dispatchers.IO) {
             try {
@@ -316,9 +354,7 @@ object Feed {
         }
     }
 
-    private fun bump(post: Post, by: Int) {
-        posts = posts?.map { if (it.id == post.id && it.author.uid == post.author.uid) it.copy(comments = (it.comments + by).coerceAtLeast(0)) else it }
-    }
+    private fun bump(post: Post, by: Int) = change(post) { it.copy(comments = (it.comments + by).coerceAtLeast(0)) }
 
     // --- Photos in posts ---
 

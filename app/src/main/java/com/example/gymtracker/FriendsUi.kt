@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
@@ -73,6 +74,8 @@ internal fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false, im
         if (image != null) androidx.compose.foundation.Image(
             image, p.title(), Modifier.fillMaxSize().then(if (ring) Modifier.padding(2.dp).clip(CircleShape) else Modifier),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop
+        ) else if (p.name.isBlank() && p.handle.isBlank()) Icon(
+            androidx.compose.material.icons.Icons.Rounded.Person, null, tint = hue, modifier = Modifier.size(size * 0.55f)
         ) else Text(
             (p.name.ifBlank { p.handle }).take(1).uppercase(),
             style = if (size >= 64.dp) AppType.display else AppType.bodyStrong,
@@ -205,7 +208,7 @@ fun FriendsSection() {
 
         if (c != null && c.requests.isNotEmpty()) Section(tr("Want to be friends")) {
             c.requests.forEach { p ->
-                AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
+                AppCard(Modifier.fillMaxWidth(), onClick = { open = p }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PersonAvatar(p, 44.dp)
                         Spacer(Modifier.width(12.dp))
@@ -261,7 +264,7 @@ fun FriendsSection() {
         )
     }
 
-    open?.let { p -> FriendProfile(p, Friends.circle?.stats?.get(p.uid), onClose = { open = null }) }
+    open?.let { p -> PersonPage(p, onClose = { open = null }) }
 }
 
 @Composable
@@ -481,162 +484,5 @@ private fun FriendCard(p: Friends.Person, s: FriendStats?, onOpen: () -> Unit) {
                 }
             }
         }
-    }
-}
-
-/** A friend's page over the Friends page: who they are, their week, last workout and best sets. */
-@Composable
-private fun FriendProfile(p: Friends.Person, cached: FriendStats?, onClose: () -> Unit) {
-    val P = LocalPalette.current
-    val scope = rememberCoroutineScope()
-    var stats by remember { mutableStateOf(cached) }
-    var loading by remember { mutableStateOf(cached == null) }
-    LaunchedEffect(p.uid) {
-        Friends.stats(p.uid)?.let { stats = it }
-        loading = false
-    }
-    var menu by remember { mutableStateOf(false) }
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    BackHandler(onBack = onClose)
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onClose,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        // The dialog's own window: dark status-bar icons on the light theme, as on every other page.
-        val view = androidx.compose.ui.platform.LocalView.current
-        val lightBackground = P.bgPrimary.luminance() > 0.5f
-        SideEffect {
-            (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
-                androidx.core.view.WindowCompat.getInsetsController(w, view).isAppearanceLightStatusBars = lightBackground
-            }
-        }
-        AnimatedVisibility(visible, enter = slideInHorizontally { it / 3 } + fadeIn(), exit = slideOutHorizontally() + fadeOut()) {
-            Box(Modifier.fillMaxSize().background(P.bgPrimary)) {
-                Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().navigationBarsPadding()
-                        .padding(horizontal = 20.dp).padding(bottom = 28.dp)
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), onClose)
-                        Spacer(Modifier.weight(1f))
-                        Box {
-                            CircleIconButton(Icons.Rounded.MoreVert, tr("More"), { menu = true })
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                                DropdownMenuItem(
-                                    text = { Text(tr("Remove friend"), style = AppType.body, color = P.dangerText) },
-                                    onClick = {
-                                        menu = false
-                                        scope.launch {
-                                            // Both halves, so it ends for both of you at once.
-                                            Friends.unfollow(p.uid)
-                                            Friends.removeFollower(p.uid)
-                                            onClose()
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PersonAvatar(p, 92.dp, ring = true)
-                        Spacer(Modifier.height(12.dp))
-                        Text(p.title(), style = AppType.display, color = P.textPrimary, textAlign = TextAlign.Center)
-                        Text("@${p.handle}", style = AppType.body, color = P.textSecondary)
-                    }
-                    Spacer(Modifier.height(22.dp))
-                    val s = stats
-                    when {
-                        s == null && loading -> Text(tr("Loading…"), style = AppType.body, color = P.textSecondary, modifier = Modifier.align(Alignment.CenterHorizontally))
-                        s == null -> Text(
-                            tr("Nothing shared yet. Their stats appear after their app syncs."),
-                            style = AppType.body, color = P.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
-                        )
-                        else -> FriendStatsBody(p, s)
-                    }
-                }
-                StatusBarScrim()
-            }
-        }
-    }
-}
-
-@Composable
-private fun FriendStatsBody(p: Friends.Person, s: FriendStats) {
-    val P = LocalPalette.current
-    val hue = hueFor(p.uid)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatTile("${s.total}", if (s.total == 1) tr("workout") else tr("workouts"), Modifier.weight(1f))
-        StatTile(tr("{0} wk", s.streak), tr("in a row"), Modifier.weight(1f))
-        StatTile(if (s.goal > 0) "${s.thisWeek}/${s.goal}" else "${s.thisWeek}", tr("this week"), Modifier.weight(1f))
-    }
-
-    // Their week, a dot per day like Today's.
-    Spacer(Modifier.height(12.dp))
-    AppCard(Modifier.fillMaxWidth()) {
-        Text(tr("This week"), style = AppType.bodyStrong, color = P.textPrimary)
-        Spacer(Modifier.height(12.dp))
-        val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            (Calendar.SUNDAY..Calendar.SATURDAY).zip(weekdayLetters()).forEach { (d, letter) ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(letter, style = AppType.caption, color = if (d == today) P.textPrimary else P.textTertiary)
-                    Spacer(Modifier.height(6.dp))
-                    Box(
-                        Modifier.size(22.dp).clip(CircleShape).background(if (d in s.days) hue else P.bgControl),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (d in s.days) Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                    }
-                }
-            }
-        }
-    }
-
-    if (s.lastTitle != null) {
-        Spacer(Modifier.height(20.dp))
-        Text(tr("Last workout"), style = AppType.overline, color = P.textSecondary, modifier = Modifier.padding(start = 4.dp))
-        Spacer(Modifier.height(8.dp))
-        AppCard(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(shown(s.lastTitle), style = AppType.title, color = P.textPrimary)
-                    Text(relativeDay(s.lastAt).replaceFirstChar { it.uppercase() }, style = AppType.caption, color = P.textSecondary)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (s.lastSeconds > 0) Pill(formatDuration(s.lastSeconds), icon = Icons.Rounded.Schedule)
-                if (s.lastSets > 0) Pill(if (s.lastSets == 1) tr("1 set") else tr("{0} sets", s.lastSets))
-                if (s.lastKg > 0) Pill(formatVolume(s.lastKg))
-            }
-        }
-    }
-
-    if (s.bests.isNotEmpty()) {
-        Spacer(Modifier.height(20.dp))
-        Text(tr("Best sets"), style = AppType.overline, color = P.textSecondary, modifier = Modifier.padding(start = 4.dp))
-        Spacer(Modifier.height(8.dp))
-        AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
-            s.bests.forEachIndexed { i, (name, set) ->
-                if (i > 0) Box(Modifier.padding(start = 54.dp).fillMaxWidth().height(1.dp).background(P.borderSubtle))
-                Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ExerciseThumb(name, size = 40.dp)
-                    Spacer(Modifier.width(14.dp))
-                    Text(shown(name), style = AppType.body, color = P.textPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(set, style = AppType.bodyStrong.copy(fontFeatureSettings = "tnum"), color = P.textPrimary)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatTile(value: String, label: String, modifier: Modifier) {
-    val P = LocalPalette.current
-    Column(modifier.clip(RoundedCornerShape(16.dp)).background(P.bgCard).padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = AppType.title.copy(fontFeatureSettings = "tnum"), color = P.textPrimary)
-        Text(label, style = AppType.caption, color = P.textSecondary)
     }
 }

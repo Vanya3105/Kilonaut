@@ -94,6 +94,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
     val user = Account.user
     var friendsOpen by remember { mutableStateOf(false) }
     var composing by remember { mutableStateOf<ComposeStart?>(null) }
+    var person by remember { mutableStateOf<Friends.Person?>(null) }
 
     LaunchedEffect(user?.uid) {
         if (user != null) {
@@ -119,7 +120,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
 
     Box(Modifier.fillMaxSize().background(if (showingPosts) Scrim else P.bgPrimary)) {
         when {
-            Feed.demo && !posts.isNullOrEmpty() -> FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) })
+            Feed.demo && !posts.isNullOrEmpty() -> FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
             user == null -> FeedEmpty(Icons.Rounded.Group, tr("Your friends' training"), tr("Sign in and add friends to see their workouts and photos here, and share yours.")) {
                 PrimaryButton(tr("Sign in"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
@@ -140,17 +141,22 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
                 onRefresh = { scope.launch { Feed.refresh(context) } },
                 modifier = Modifier.fillMaxSize()
             ) {
-                FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) })
+                FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
             }
         }
         FeedTopBar(
             onPosts = showingPosts,
-            canPost = user != null && handle != null,
+            canPost = Feed.demo || (user != null && handle != null),
             onFriends = { friendsOpen = true },
             onNewPost = { composing = ComposeStart(null) },
-            onTitleLongPress = if (debuggable) ({ Feed.showDemo() }) else null
+            onTitleLongPress = if (debuggable) ({ Feed.showDemo() }) else null,
+            onMe = if (Feed.demo || (user != null && handle != null)) ({
+                person = if (Feed.demo) Friends.Person("demo-me", user?.name.orEmpty(), handle ?: "you")
+                else Friends.Person(user!!.uid, user.name.orEmpty(), handle.orEmpty())
+            }) else null
         )
     }
+    person?.let { PersonPage(it, onClose = { person = null }) }
 
     if (friendsOpen) FullPage(tr("Friends"), onClose = { friendsOpen = false; scope.launch { Feed.refresh(context) } }) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) { FriendsSection() }
@@ -160,7 +166,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
 
 /** "Feed" with Friends and New post, floating over the pages (white on photos, the theme's colours otherwise). */
 @Composable
-internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Unit, onNewPost: () -> Unit, onTitleLongPress: (() -> Unit)? = null) {
+internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Unit, onNewPost: () -> Unit, onTitleLongPress: (() -> Unit)? = null, onMe: (() -> Unit)? = null) {
     val P = LocalPalette.current
     val ink = if (onPosts) White else P.textPrimary
     Box(Modifier.fillMaxWidth()) {
@@ -176,6 +182,16 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
                     tr("Feed"), style = AppType.display, color = ink,
                     modifier = if (onTitleLongPress != null) Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { onTitleLongPress() }) } else Modifier
                 )
+            }
+            if (onMe != null) {
+                // You: your page, with your posts and stats.
+                Box(
+                    Modifier.size(42.dp).clip(CircleShape).border(2.dp, if (onPosts) White.copy(alpha = 0.85f) else P.borderStrong, CircleShape)
+                        .padding(3.dp).clip(CircleShape).pressable(onClick = onMe)
+                ) {
+                    PersonAvatar(Friends.Person(Feed.me() ?: "demo-me", Account.user?.name.orEmpty(), Friends.myHandle.orEmpty()), 36.dp, image = ProfilePhoto.mine)
+                }
+                Spacer(Modifier.width(10.dp))
             }
             Box {
                 Box(
@@ -200,9 +216,19 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
 
 /** The pages: one per post, then "You're all caught up". */
 @Composable
-internal fun FeedPager(posts: List<Feed.Post>, people: Map<String, Friends.Person>, onFriends: () -> Unit, onNewPost: () -> Unit, pager: PagerState = rememberPagerState { posts.size + 1 }) {
+internal fun FeedPager(
+    posts: List<Feed.Post>, people: Map<String, Friends.Person>, onFriends: () -> Unit, onNewPost: () -> Unit,
+    pager: PagerState = rememberPagerState { posts.size + 1 }, endPage: Boolean = true, onOpenPerson: (Friends.Person) -> Unit = {}
+) {
     var commentsFor by remember { mutableStateOf<Feed.Post?>(null) }
     var workoutOf by remember { mutableStateOf<Feed.Post?>(null) }
+    // Your new post goes on top: glide up to it.
+    val top = posts.firstOrNull()
+    LaunchedEffect(top?.id) {
+        if (top != null && (top.mine || top.author.uid == "demo-me") && System.currentTimeMillis() - top.createdAt < 60_000 && pager.currentPage != 0) {
+            pager.animateScrollToPage(0)
+        }
+    }
     Box(Modifier.fillMaxSize()) {
     VerticalPager(pager, Modifier.fillMaxSize(), beyondViewportPageCount = 1, key = { if (it < posts.size) posts[it].author.uid + "/" + posts[it].id else "end" }) { page ->
         // How far this page is from settled: it shrinks a little and its corners round as it leaves.
@@ -221,9 +247,9 @@ internal fun FeedPager(posts: List<Feed.Post>, people: Map<String, Friends.Perso
                 val post = posts[page]
                 PostPage(
                     post, people, current = pager.settledPage == page,
-                    onComments = { commentsFor = post }, onWorkout = { workoutOf = post }
+                    onComments = { commentsFor = post }, onWorkout = { workoutOf = post }, onPerson = { onOpenPerson(post.author) }
                 )
-            } else CaughtUp(onFriends, onNewPost)
+            } else if (endPage) CaughtUp(onFriends, onNewPost) else Box(Modifier.fillMaxSize().background(Scrim))
         }
     }
     // A nudge on the first page: there's more below.
@@ -260,7 +286,7 @@ private data class Burst(val id: Long, val at: Offset, val tilt: Float)
 
 /** One post, the whole page. */
 @Composable
-private fun PostPage(post: Feed.Post, people: Map<String, Friends.Person>, current: Boolean, onComments: () -> Unit, onWorkout: () -> Unit) {
+internal fun PostPage(post: Feed.Post, people: Map<String, Friends.Person>, current: Boolean, onComments: () -> Unit, onWorkout: () -> Unit, onPerson: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val bursts = remember { mutableStateListOf<Burst>() }
@@ -318,7 +344,7 @@ private fun PostPage(post: Feed.Post, people: Map<String, Friends.Person>, curre
             Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 18.dp, end = 86.dp, bottom = 22.dp)
                 .graphicsLayer { alpha = shown; translationY = (1f - shown) * 18.dp.toPx() }
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.clip(RoundedCornerShape(8.dp)).pressable(onClick = onPerson), verticalAlignment = Alignment.CenterVertically) {
                 Text(post.author.title(), style = AppType.bodyStrong, color = White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 Text("  ·  " + postAge(post.createdAt), style = AppType.caption, color = White.copy(alpha = 0.75f))
             }
@@ -349,7 +375,7 @@ private fun PostPage(post: Feed.Post, people: Map<String, Friends.Person>, curre
         }
 
         // The rail: who, heart, comments, and ⋯ on your own.
-        Rail(post, Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 18.dp).graphicsLayer { alpha = 0.4f + 0.6f * shown }, onLike = like, onComments = onComments)
+        Rail(post, Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 18.dp).graphicsLayer { alpha = 0.4f + 0.6f * shown }, onLike = like, onComments = onComments, onPerson = onPerson)
 
         // Hearts from double-taps, each floating up and fading where it was tapped.
         bursts.forEach { b -> key(b.id) { HeartBurst(b) { bursts.remove(b) } } }
@@ -357,7 +383,7 @@ private fun PostPage(post: Feed.Post, people: Map<String, Friends.Person>, curre
 }
 
 @Composable
-private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit, onComments: () -> Unit) {
+private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit, onComments: () -> Unit, onPerson: () -> Unit) {
     val P = LocalPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -365,7 +391,7 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Box(Modifier.clip(CircleShape).border(2.dp, White, CircleShape).padding(2.dp)) { PersonAvatar(post.author, 44.dp) }
+        Box(Modifier.clip(CircleShape).border(2.dp, White, CircleShape).padding(2.dp).clip(CircleShape).pressable(onClick = onPerson)) { PersonAvatar(post.author, 44.dp) }
 
         val pop = remember { Animatable(1f) }
         LaunchedEffect(liked) {
@@ -376,12 +402,12 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
         }
         RailButton(
             icon = Icons.Rounded.Favorite, tint = if (liked) Color(0xFFFF4D5E) else White,
-            label = if (post.likes.isEmpty()) tr("Like") else "${post.likes.size}",
+            label = if (post.likes.isEmpty()) null else "${post.likes.size}",
             description = if (liked) tr("Unlike") else tr("Like"), scale = pop.value
         ) { onLike(!liked) }
         RailButton(
             icon = Icons.Rounded.ChatBubble, tint = White,
-            label = if (post.comments == 0) tr("Comment") else "${post.comments}", description = tr("Comments")
+            label = if (post.comments == 0) null else "${post.comments}", description = tr("Comments")
         ) { onComments() }
         if (post.mine) Box {
             RailButton(icon = Icons.Rounded.MoreHoriz, tint = White, label = null, description = tr("More")) { menu = true }

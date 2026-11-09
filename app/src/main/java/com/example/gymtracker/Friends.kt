@@ -242,7 +242,27 @@ object Friends {
     }
 
     /** A friend's stats, or null (not friends, or nothing shared yet). */
-    suspend fun stats(other: String): FriendStats? = withContext(Dispatchers.IO) { statsNow(other) }
+    suspend fun stats(other: String): FriendStats? = withContext(Dispatchers.IO) {
+        if (Feed.demo) demoStats(other) else statsNow(other)
+    }
+
+    /** Your own stats as friends see them. */
+    fun myStats(context: Context): FriendStats? = parseFriendStats(
+        friendStatsJson(LocalStorage.loadHistory(context), programFor(LocalStorage.loadUserProfile(context).splitProgram).weeklyGoal).toString()
+    )
+
+    /** Sample stats for the debug sample feed. */
+    private fun demoStats(uid: String): FriendStats {
+        val today = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK)
+        val n = Math.floorMod(uid.hashCode(), 3)
+        return FriendStats(
+            total = 41 + 23 * n, thisWeek = 2 + n % 2, goal = 4, streak = 12 - 4 * n,
+            days = setOf(java.util.Calendar.SUNDAY, today).let { if (n == 1) it + java.util.Calendar.TUESDAY else it },
+            lastTitle = listOf("Legs A", "Push A", "Full Body B")[n], lastAt = System.currentTimeMillis() - 3_600_000L * (2 + 20 * n),
+            lastSeconds = 3900, lastSets = 19, lastKg = 8450,
+            bests = listOf("Back Squat" to "120 kg × 5", "Barbell Bench Press" to "92.5 kg × 6", "Deadlift" to "150 kg × 3", "Plank" to "1:35")
+        )
+    }
 
     private fun statsNow(other: String): FriendStats? = try {
         val d = db().collection("users").document(other).collection("public").document("stats").get(Source.SERVER).waitFor()
