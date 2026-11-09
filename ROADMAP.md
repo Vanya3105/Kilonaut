@@ -24,7 +24,7 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 - [x] Friends see each other's stats (`users/{uid}/public/stats`, written on every sync when you have a username, `friendStatsJson`): workouts, this week against the plan, weeks in a row, the last workout, best sets of the 5 most-done exercises (shown in the reader's units). Never body weight, notes or photos.
 - [x] Profile: a Friends card (count, badge for requests) opens the page: your username (share it), add a friend, requests, friends (tap → their stats; Remove friend ends both follows), waiting. Hebrew for all of it. `FriendsTest`.
 - [ ] Owner publishes rules; test with two accounts on the emulator; owner tests on the phone.
-- [ ] Next (owner asked how hard): a feed of workout summaries and photos. See notes below.
+- [ ] Next (owner asked how hard): a feed of workout summaries and photos. Summaries fit the free plan; photos need Cloud Storage (paid Blaze plan, free quota) or small JPEGs stored in Firestore; Play needs report and block for anything people post.
 
 **1.0.0 beta 2 published** (owner's request, 2026-11-09): pre-release `v1.0.0-beta.2` from `accounts-signin` (phone code 40, watch 1_000_040): accounts step 4 with its two questions, the finish screen, Today's workout card, Short on time list, setup figure by age. What's new now shows every version skipped since the last one seen (`WhatsNew.sections`), older ones as a compact list, Got it pinned; Profile → What's new shows them all. Share Kilonaut links to the newest release the update check has seen (`AppUpdate.shareVersion`), else the installed one. Next beta: beta.3 (code 41) and its notes in `WhatsNew.notesFor` + `VERSIONS`.
 
