@@ -29,7 +29,7 @@ class FriendsTest {
         assertFalse(json.contains("82.5"))
         assertFalse(json.contains("secret"))
 
-        val s = parseFriendStats(json)!!
+        val s = parseFriendStats(json, now)!!
         assertEquals(2, s.total)
         assertEquals(4, s.goal)
         assertEquals("Push", s.lastTitle)
@@ -38,11 +38,18 @@ class FriendsTest {
         val bench = s.bests.first { it.first == "Bench Press" }.second
         assertTrue(bench, bench.contains("80"))
         assertTrue(s.bests.any { it.first == "Plank" })
+        assertEquals(1, s.days.size)
+
+        // Read a week later, before they open the app again: nothing this week yet, the rest stays.
+        val later = parseFriendStats(json, now + 7 * day)!!
+        assertEquals(0, later.thisWeek)
+        assertTrue(later.days.isEmpty())
+        assertEquals(2, later.total)
     }
 
     @Test
     fun noWorkoutsYet() {
-        val s = parseFriendStats(friendStatsJson(emptyList(), 3, now).toString())!!
+        val s = parseFriendStats(friendStatsJson(emptyList(), 3, now).toString(), now)!!
         assertEquals(0, s.total)
         assertEquals(null, s.lastTitle)
         assertTrue(s.bests.isEmpty())

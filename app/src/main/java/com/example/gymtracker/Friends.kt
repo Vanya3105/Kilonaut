@@ -30,18 +30,17 @@ import java.util.concurrent.TimeUnit
 /** What a friend sees about you: a summary only, never body weight, notes or photos. */
 internal fun friendStatsJson(history: List<CompletedWorkout>, weeklyGoal: Int, now: Long = System.currentTimeMillis()): JSONObject {
     val c = computeConsistency(history, nowMillis = now, weeks = 1)
-    val weekStart = java.util.Calendar.getInstance().apply {
-        timeInMillis = now
-        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
-        set(java.util.Calendar.DAY_OF_WEEK, firstDayOfWeek)
-        if (timeInMillis > now) add(java.util.Calendar.WEEK_OF_YEAR, -1)
-    }.timeInMillis
+    val weekStart = weekStartOf(now)
     val out = JSONObject()
         .put("v", 1)
         .put("total", c.total)
         .put("thisWeek", history.count { it.id in weekStart..now })
         .put("goal", weeklyGoal)
         .put("streak", c.weekStreak)
+        .put("weekStart", weekStart)
+        // Which days of this week had a workout (Calendar.DAY_OF_WEEK), for the week strip.
+        .put("days", JSONArray(history.filter { it.id in weekStart..now }
+            .map { java.util.Calendar.getInstance().apply { timeInMillis = it.id }.get(java.util.Calendar.DAY_OF_WEEK) }.distinct().sorted()))
     history.maxByOrNull { it.id }?.let { w ->
         out.put("last", JSONObject()
             .put("title", w.splitTitle)
@@ -69,16 +68,30 @@ internal fun friendStatsJson(history: List<CompletedWorkout>, weeklyGoal: Int, n
 /** A friend's stats as read back; [bests] in the reader's units when shown. */
 data class FriendStats(
     val total: Int, val thisWeek: Int, val goal: Int, val streak: Int,
+    /** Days of this week with a workout (Calendar.DAY_OF_WEEK) when the stats were written; [weekOf] says which week. */
+    val days: Set<Int>,
     val lastTitle: String?, val lastAt: Long, val lastSeconds: Long, val lastSets: Int, val lastKg: Int,
     val bests: List<Pair<String, String>>
 )
 
-internal fun parseFriendStats(json: String): FriendStats? = try {
+/** Midnight at the start of [now]'s week (the phone's first day of the week). */
+internal fun weekStartOf(now: Long): Long = java.util.Calendar.getInstance().apply {
+    timeInMillis = now
+    set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    set(java.util.Calendar.DAY_OF_WEEK, firstDayOfWeek)
+    if (timeInMillis > now) add(java.util.Calendar.WEEK_OF_YEAR, -1)
+}.timeInMillis
+
+internal fun parseFriendStats(json: String, now: Long = System.currentTimeMillis()): FriendStats? = try {
     val o = JSONObject(json)
+    // Written in an earlier week (they haven't opened the app since): nothing this week yet. A day's
+    // leeway: a friend in another time zone starts their week some hours before or after you.
+    val current = !o.has("weekStart") || o.optLong("weekStart") >= weekStartOf(now) - 26 * 60 * 60 * 1000L
     val last = o.optJSONObject("last")
     val bests = o.optJSONArray("bests") ?: JSONArray()
     FriendStats(
-        total = o.optInt("total"), thisWeek = o.optInt("thisWeek"), goal = o.optInt("goal"), streak = o.optInt("streak"),
+        total = o.optInt("total"), thisWeek = if (current) o.optInt("thisWeek") else 0, goal = o.optInt("goal"), streak = o.optInt("streak"),
+        days = if (!current) emptySet() else o.optJSONArray("days")?.let { a -> (0 until a.length()).map { a.optInt(it) }.toSet() } ?: emptySet(),
         lastTitle = last?.optString("title"), lastAt = last?.optLong("at") ?: 0L, lastSeconds = last?.optLong("seconds") ?: 0L,
         lastSets = last?.optInt("sets") ?: 0, lastKg = last?.optInt("kg") ?: 0,
         bests = (0 until bests.length()).mapNotNull { i ->
@@ -100,7 +113,11 @@ object Friends {
     data class Person(val uid: String, val name: String, val handle: String)
 
     /** Friends (follow each other), requests (follow you, you don't follow back) and sent (you follow, not back yet). */
-    data class Circle(val friends: List<Person>, val requests: List<Person>, val sent: List<Person>)
+    data class Circle(
+        val friends: List<Person>, val requests: List<Person>, val sent: List<Person>,
+        /** Friends' stats by uid, for the cards (missing: nothing shared yet). */
+        val stats: Map<String, FriendStats> = emptyMap()
+    )
 
     var myHandle by mutableStateOf<String?>(null)
         private set
@@ -175,7 +192,9 @@ object Friends {
             val followers = user.collection("followers").get(Source.SERVER).waitFor().documents.map { it.id }.toSet()
             val people = (following + followers).associateWith { runCatching { profile(it) }.getOrElse { _ -> Person(it, "", "") } }
             fun list(ids: Set<String>) = ids.mapNotNull { people[it] }.sortedBy { it.name.lowercase() }
-            val c = Circle(list(following intersect followers), list(followers - following), list(following - followers))
+            val friendIds = following intersect followers
+            val stats = friendIds.mapNotNull { id -> statsNow(id)?.let { id to it } }.toMap()
+            val c = Circle(list(friendIds), list(followers - following), list(following - followers), stats)
             withContext(Dispatchers.Main) { circle = c; requestCount = c.requests.size }
             c
         } catch (_: Exception) {
@@ -219,13 +238,13 @@ object Friends {
     }
 
     /** A friend's stats, or null (not friends, or nothing shared yet). */
-    suspend fun stats(other: String): FriendStats? = withContext(Dispatchers.IO) {
-        try {
-            val d = db().collection("users").document(other).collection("public").document("stats").get(Source.SERVER).waitFor()
-            d.getString("data")?.let(::parseFriendStats)
-        } catch (_: Exception) {
-            null
-        }
+    suspend fun stats(other: String): FriendStats? = withContext(Dispatchers.IO) { statsNow(other) }
+
+    private fun statsNow(other: String): FriendStats? = try {
+        val d = db().collection("users").document(other).collection("public").document("stats").get(Source.SERVER).waitFor()
+        d.getString("data")?.let(::parseFriendStats)
+    } catch (_: Exception) {
+        null
     }
 
     /**
