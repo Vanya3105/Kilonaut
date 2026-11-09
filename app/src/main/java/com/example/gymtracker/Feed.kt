@@ -185,7 +185,7 @@ object Feed {
         try {
             val circle = Friends.refresh() ?: return@withContext false
             val handle = Friends.myHandle ?: Friends.loadMe(context)
-            val me = Friends.Person(uid, Account.user?.name.orEmpty(), handle.orEmpty(), ProfilePhoto.local(context))
+            val me = Friends.Person(uid, (Friends.myName ?: Account.user?.name).orEmpty(), handle.orEmpty(), ProfilePhoto.local(context))
             val authors = circle.friends + me
             // All authors' queries at once, then the likes and comment counts of what came back.
             val queries = authors.map { a -> a to posts(a.uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(15).get(Source.SERVER) }
@@ -223,6 +223,19 @@ object Feed {
                 likes = runCatching { likesTask.waitFor().documents.map { it.id } }.getOrDefault(emptyList()),
                 comments = runCatching { countTask.waitFor().count.toInt() }.getOrDefault(0)
             )
+        }
+    }
+
+    /** One post, for opening it from Activity; null if it's gone or can't be read. */
+    suspend fun loadPost(owner: String, id: String): Post? = withContext(Dispatchers.IO) {
+        posts?.firstOrNull { it.id == id && it.author.uid == owner }?.let { return@withContext it }
+        try {
+            val d = posts(owner).document(id).get(Source.SERVER).waitFor()
+            if (!d.exists()) return@withContext null
+            val author = people[owner] ?: if (owner == me()) Friends.meAsPerson() ?: Friends.personNow(owner) else Friends.personNow(owner)
+            build(listOf(author to d)).firstOrNull()
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -267,7 +280,7 @@ object Feed {
         if (demo) {
             // The sample feed: the post goes on top here only.
             val w = workout?.let { parseWorkoutPost(workoutPostJson(it, LocalStorage.loadHistory(context).filter { h -> h.id < it.id }).toString()) }
-            val me = Friends.Person("demo-me", Account.user?.name.orEmpty(), "you")
+            val me = Friends.Person("demo-me", (Friends.myName ?: Account.user?.name).orEmpty(), "you")
             withContext(Dispatchers.Main) { posts = listOf(Post("local${System.nanoTime()}", me, System.currentTimeMillis(), text.trim(), photo, w, emptyList(), 0)) + posts.orEmpty() }
             return@withContext null
         }

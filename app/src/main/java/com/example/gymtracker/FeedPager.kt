@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChatBubble
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.DropdownMenu
@@ -98,11 +100,14 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
     var friendsOpen by remember { mutableStateOf(false) }
     var composing by remember { mutableStateOf<ComposeStart?>(null) }
     var person by remember { mutableStateOf<Friends.Person?>(null) }
+    var activityOpen by remember { mutableStateOf(false) }
+    var openPost by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     LaunchedEffect(user?.uid) {
         if (user != null) {
             Friends.loadMe(context)
             Feed.refresh(context)
+            Feed.me()?.let { ActivityLog.refreshUnread(context, it) }
         }
     }
     val posts = Feed.posts
@@ -155,15 +160,22 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
         FeedTopBar(
             onPosts = showingPosts,
             canPost = Feed.demo || (user != null && handle != null),
-            onFriends = { friendsOpen = true },
+            onFriends = { if (user != null && handle != null && !Feed.demo) activityOpen = true else friendsOpen = true },
             onNewPost = { composing = ComposeStart(null) },
             onTitleLongPress = if (debuggable) ({ Feed.showDemo() }) else null,
             onMe = if (Feed.demo || (user != null && handle != null)) ({
                 person = if (Feed.demo) Friends.Person("demo-me", user?.name.orEmpty(), handle ?: "you")
-                else Friends.Person(user!!.uid, user.name.orEmpty(), handle.orEmpty())
+                else Friends.meAsPerson() ?: Friends.Person(user!!.uid, user.name.orEmpty(), handle.orEmpty())
             }) else null
         )
     }
+    if (activityOpen) ActivityPage(
+        onClose = { activityOpen = false },
+        onFriends = { friendsOpen = true },
+        onPerson = { person = it },
+        onPost = { owner, id -> openPost = owner to id }
+    )
+    openPost?.let { (owner, id) -> PostViewer(owner, id, onClose = { openPost = null }, onPerson = { person = it }) }
     person?.let { PersonPage(it, onClose = { person = null }) }
 
     if (friendsOpen) FullPage(tr("Friends"), onClose = { friendsOpen = false; scope.launch { Feed.refresh(context) } }) {
@@ -197,7 +209,7 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
                     Modifier.size(42.dp).clip(CircleShape).border(2.dp, if (onPosts) White.copy(alpha = 0.85f) else P.borderStrong, CircleShape)
                         .padding(3.dp).clip(CircleShape).pressable(onClick = onMe)
                 ) {
-                    PersonAvatar(Friends.Person(Feed.me() ?: "demo-me", Account.user?.name.orEmpty(), Friends.myHandle.orEmpty()), 36.dp, image = ProfilePhoto.mine)
+                    PersonAvatar(Friends.Person(Feed.me() ?: "demo-me", (Friends.myName ?: Account.user?.name).orEmpty(), Friends.myHandle.orEmpty()), 36.dp, image = ProfilePhoto.mine)
                 }
                 Spacer(Modifier.width(10.dp))
             }
@@ -205,8 +217,8 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
                 Box(
                     Modifier.size(42.dp).clip(CircleShape).background(if (onPosts) White.copy(alpha = 0.18f) else P.bgControl).pressable(onClick = onFriends),
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Rounded.Group, tr("Friends"), tint = ink, modifier = Modifier.size(22.dp)) }
-                if (Friends.requestCount > 0) Box(
+                ) { Icon(Icons.Rounded.Notifications, tr("Activity"), tint = ink, modifier = Modifier.size(22.dp)) }
+                if (Friends.requestCount > 0 || ActivityLog.unread > 0) Box(
                     Modifier.align(Alignment.TopEnd).size(11.dp).clip(CircleShape).background(P.accentPrimary)
                         .border(2.dp, if (onPosts) Scrim else P.bgPrimary, CircleShape)
                 )
@@ -255,7 +267,8 @@ internal fun FeedPager(
                 val post = posts[page]
                 PostPage(
                     post, people, current = pager.settledPage == page,
-                    onComments = { commentsFor = post }, onWorkout = { workoutOf = post }, onPerson = { onOpenPerson(post.author) }
+                    onComments = { commentsFor = post }, onWorkout = { workoutOf = post }, onPerson = { onOpenPerson(post.author) },
+                    onOpenPerson = onOpenPerson
                 )
             } else if (endPage) CaughtUp(onFriends, onNewPost) else Box(Modifier.fillMaxSize().background(Scrim))
         }
@@ -294,7 +307,12 @@ private data class Burst(val id: Long, val at: Offset, val tilt: Float)
 
 /** One post, the whole page. */
 @Composable
-internal fun PostPage(post: Feed.Post, people: Map<String, Friends.Person>, current: Boolean, onComments: () -> Unit, onWorkout: () -> Unit, onPerson: () -> Unit) {
+internal fun PostPage(
+    post: Feed.Post, people: Map<String, Friends.Person>, current: Boolean, onComments: () -> Unit, onWorkout: () -> Unit, onPerson: () -> Unit,
+    onOpenPerson: (Friends.Person) -> Unit = {}
+) {
+    var likersOpen by remember { mutableStateOf(false) }
+    if (likersOpen) LikersSheet(post, people, onPerson = onOpenPerson, onDismiss = { likersOpen = false })
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val bursts = remember { mutableStateListOf<Burst>() }
@@ -377,7 +395,8 @@ internal fun PostPage(post: Feed.Post, people: Map<String, Friends.Person>, curr
                         post.likes.size == 1 -> tr("Liked by {0}", likers[0])
                         else -> tr("Liked by {0} and {1} more", likers[0], post.likes.size - 1)
                     },
-                    style = AppType.caption, color = White.copy(alpha = 0.85f)
+                    style = AppType.caption, color = White.copy(alpha = 0.85f),
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).pressable { likersOpen = true }.padding(vertical = 2.dp)
                 )
             }
         }
@@ -755,7 +774,7 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                 }
             }
             Row(Modifier.fillMaxWidth().background(P.bgElevated).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                PersonAvatar(Friends.Person(Feed.me().orEmpty(), Account.user?.name.orEmpty(), Friends.myHandle.orEmpty()), 34.dp, image = ProfilePhoto.mine)
+                PersonAvatar(Friends.Person(Feed.me().orEmpty(), (Friends.myName ?: Account.user?.name).orEmpty(), Friends.myHandle.orEmpty()), 34.dp, image = ProfilePhoto.mine)
                 Spacer(Modifier.width(10.dp))
                 Row(Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(P.bgControl).padding(horizontal = 16.dp, vertical = 11.dp)) {
                     Box(Modifier.weight(1f)) {
@@ -791,4 +810,39 @@ internal fun threaded(list: List<Feed.Comment>): List<Feed.Comment> {
     val roots = list.filter { it.replyTo == null || it.replyTo !in ids }.sortedBy { it.at }
     val replies = list.filter { it.replyTo != null && it.replyTo in ids }.groupBy { it.replyTo }
     return roots.flatMap { r -> listOf(r) + replies[r.id].orEmpty().sortedBy { it.at } }
+}
+
+/** One post opened from Activity, full screen, with its comments a tap away. */
+@Composable
+fun PostViewer(owner: String, id: String, onClose: () -> Unit, onPerson: (Friends.Person) -> Unit) {
+    var post by remember { mutableStateOf<Feed.Post?>(null) }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(owner, id) {
+        post = Feed.loadPost(owner, id)
+        loaded = true
+    }
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = false }
+        }
+        Box(Modifier.fillMaxSize().background(Scrim)) {
+            val p = post
+            when {
+                p != null -> {
+                    val live = Feed.posts?.firstOrNull { it.id == p.id && it.author.uid == p.author.uid } ?: p
+                    FeedPager(listOf(live), Feed.people, onFriends = {}, onNewPost = {}, endPage = false, onOpenPerson = { onClose(); onPerson(it) })
+                }
+                loaded -> Text(
+                    tr("This post isn't available anymore."), style = AppType.body, color = White.copy(alpha = 0.8f),
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp), textAlign = TextAlign.Center
+                )
+            }
+            Box(
+                Modifier.statusBarsPadding().padding(14.dp).size(40.dp).clip(CircleShape).background(Scrim.copy(alpha = 0.35f)).pressable(onClick = onClose),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), tint = White, modifier = Modifier.size(22.dp)) }
+        }
+    }
 }

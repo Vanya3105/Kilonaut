@@ -41,6 +41,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -103,6 +105,16 @@ fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf<ReportTarget?>(null) }
     var blocking by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var friendsOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    if (editing) EditProfilePage(onClose = { editing = false })
+    if (friendsOpen) FullPage(tr("Friends"), onClose = { friendsOpen = false }) {
+        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) { FriendsSection() }
+    }
+    if (settingsOpen) FullPage(tr("Social settings"), onClose = { settingsOpen = false }) {
+        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) { SocialSettingsSection() }
+    }
     reporting?.let { ReportSheet(it, onDismiss = { reporting = null }) }
     if (blocking) BlockDialog(person, onDismiss = { blocking = false }, onBlocked = onClose)
     val hue = hueFor(person.uid)
@@ -135,6 +147,9 @@ fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
                 if (!open) {
                     item(span = { GridItemSpan(3) }) { Locked(person, relation) }
                 } else {
+                    if (relation == Relation.ME && !Feed.demo) item(span = { GridItemSpan(3) }) {
+                        MyActions(onEdit = { editing = true }, onFriends = { friendsOpen = true }, onSettings = { settingsOpen = true })
+                    }
                     item(span = { GridItemSpan(3) }) { Numbers(stats, hue, loaded) }
                     stats?.let { s -> item(span = { GridItemSpan(3) }) { Week(s, hue) } }
                     item(span = { GridItemSpan(3) }) {
@@ -250,6 +265,8 @@ private fun Header(person: Friends.Person, relation: Relation, photo: androidx.c
         Column(Modifier.padding(horizontal = 20.dp)) {
             Text(person.title(), style = AppType.display, color = P.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (person.name.isNotBlank() && person.handle.isNotBlank()) Text("@${person.handle}", style = AppType.body, color = P.textSecondary)
+            val bio = if (relation == Relation.ME) Friends.myBio else person.bio
+            if (bio.isNotBlank()) Text(bio, style = AppType.body, color = P.textPrimary, modifier = Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // When they last trained (the streak has its own tile below).
@@ -263,6 +280,26 @@ private fun Header(person: Friends.Person, relation: Relation, photo: androidx.c
                     else -> {}
                 }
             }
+        }
+    }
+}
+
+/** Your own page: Edit profile, Friends and settings, side by side. */
+@Composable
+private fun MyActions(onEdit: () -> Unit, onFriends: () -> Unit, onSettings: () -> Unit) {
+    val P = LocalPalette.current
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        @Composable
+        fun Button(text: String, modifier: Modifier, onClick: () -> Unit) {
+            Box(modifier.height(44.dp).clip(RoundedCornerShape(14.dp)).background(P.bgControl).pressable(onClick = onClick), contentAlignment = Alignment.Center) {
+                Text(text, style = AppType.label, color = P.textPrimary)
+            }
+        }
+        Button(tr("Edit profile"), Modifier.weight(1f), onEdit)
+        val n = Friends.circle?.friends?.size ?: 0
+        Button(if (n == 1) tr("1 friend") else tr("{0} friends", n), Modifier.weight(1f), onFriends)
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(P.bgControl).pressable(onClick = onSettings), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Settings, tr("Social settings"), tint = P.textPrimary, modifier = Modifier.size(20.dp))
         }
     }
 }

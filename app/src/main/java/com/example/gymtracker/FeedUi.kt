@@ -209,7 +209,7 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
     // Leaving with something written or attached asks first: one Back press shouldn't lose a post.
     var confirmDiscard by remember { mutableStateOf(false) }
     val leave = { if (text.isNotBlank() || photo != null || (workout != null && workout != start)) confirmDiscard = true else onClose() }
-    val me = Friends.Person(Feed.me() ?: "demo-me", Account.user?.name.orEmpty(), Friends.myHandle ?: if (Feed.demo) "you" else "")
+    val me = Friends.Person(Feed.me() ?: "demo-me", (Friends.myName ?: Account.user?.name).orEmpty(), Friends.myHandle ?: if (Feed.demo) "you" else "")
     // What the post will look like, rebuilt as it changes.
     val preview = remember(text, photo, workout) {
         val w = workout?.let { parseWorkoutPost(workoutPostJson(it, history.filter { h -> h.id < it.id }).toString()) }

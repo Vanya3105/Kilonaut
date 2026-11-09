@@ -48,6 +48,7 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -193,6 +194,7 @@ fun SettingsScreen(
         when (p) {
             SettingsPage.ACCOUNT -> SettingsGroup(tr("Account")) { AccountSection() }
             SettingsPage.FRIENDS -> FriendsSection()
+            SettingsPage.SOCIAL -> SocialSettingsSection()
             SettingsPage.SPLIT -> {
                 SettingsGroup(tr("Training split")) {
                     val current = programFor(userProfile.splitProgram)
@@ -931,6 +933,7 @@ private fun SettingsGroup(title: String, padding: PaddingValues = PaddingValues(
 enum class SettingsPage(val icon: ImageVector) {
     ACCOUNT(Icons.Rounded.AccountCircle),
     FRIENDS(Icons.Rounded.Group),
+    SOCIAL(Icons.Rounded.Shield),
     SPLIT(Icons.Rounded.CalendarMonth),
     WORKOUTS(Icons.Rounded.FitnessCenter),
     REMINDERS(Icons.Rounded.Notifications),
@@ -946,6 +949,7 @@ enum class SettingsPage(val icon: ImageVector) {
     val title: String get() = when (this) {
         ACCOUNT -> tr("Account")
         FRIENDS -> tr("Friends")
+        SOCIAL -> tr("Friends and privacy")
         SPLIT -> tr("Training split")
         WORKOUTS -> tr("Workouts")
         REMINDERS -> tr("Reminders")

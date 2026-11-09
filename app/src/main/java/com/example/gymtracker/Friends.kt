@@ -111,7 +111,7 @@ internal fun isValidHandle(handle: String): Boolean = Regex("^[a-z0-9_.]{3,20}$"
 
 object Friends {
     /** [photo]: their profile picture as stored (base64 JPEG), or null. */
-    data class Person(val uid: String, val name: String, val handle: String, val photo: String? = null)
+    data class Person(val uid: String, val name: String, val handle: String, val photo: String? = null, val bio: String = "")
 
     /** Friends (follow each other), requests (follow you, you don't follow back) and sent (you follow, not back yet). */
     data class Circle(
@@ -133,7 +133,7 @@ object Friends {
     private fun <T> Task<T>.waitFor(): T = Tasks.await(this, 20, TimeUnit.SECONDS)
 
     fun signedOut() {
-        myHandle = null; circle = null; requestCount = 0; blocked = emptyList()
+        myHandle = null; myName = null; myBio = ""; circle = null; requestCount = 0; blocked = emptyList()
     }
 
     /** People you blocked (users/{me}/blocked): no follows either way, their comments hidden. */
@@ -147,9 +147,39 @@ object Friends {
         val uid = me() ?: return@withContext null
         val profile = try { db().collection("profiles").document(uid).get(Source.SERVER).waitFor() } catch (_: Exception) { return@withContext myHandle }
         val handle = profile.getString("handle")
-        withContext(Dispatchers.Main) { myHandle = handle }
+        withContext(Dispatchers.Main) {
+            myHandle = handle
+            myName = profile.getString("name")
+            myBio = profile.getString("bio").orEmpty()
+        }
         ProfilePhoto.reconcile(context, profile.getString("photo"))
         handle
+    }
+
+    /** The name and bio friends see (from your profile), once loaded. */
+    var myName by mutableStateOf<String?>(null)
+        private set
+    var myBio by mutableStateOf("")
+        private set
+
+    /** Saves the name and bio friends see. Null when done, else why not. */
+    suspend fun saveProfile(name: String, bio: String): String? = withContext(Dispatchers.IO) {
+        val uid = me() ?: return@withContext tr("Sign in first.")
+        val n = name.trim().take(40)
+        val b = bio.trim().take(150)
+        try {
+            db().collection("profiles").document(uid).set(mapOf("name" to n, "bio" to b), com.google.firebase.firestore.SetOptions.merge()).waitFor()
+            withContext(Dispatchers.Main) { myName = n; myBio = b }
+            null
+        } catch (_: Exception) {
+            tr("Couldn't save it. Check your connection.")
+        }
+    }
+
+    /** You as others see you. */
+    fun meAsPerson(): Person? {
+        val uid = me() ?: return null
+        return Person(uid, myName ?: Account.user?.name.orEmpty(), myHandle.orEmpty(), bio = myBio)
     }
 
     /** Claims [raw] as your username (and lets go of the old one). Null when done, else why not. */
@@ -165,11 +195,13 @@ object Friends {
                 if (taken.exists() && taken.getString("uid") != uid) throw IllegalStateException("taken")
                 t.set(db.collection("handles").document(handle), mapOf("uid" to uid))
                 // Merged, so a photo set before the username stays.
-                t.set(db.collection("profiles").document(uid), mapOf("handle" to handle, "name" to name), com.google.firebase.firestore.SetOptions.merge())
+                // The first time it also sets the name; later the name you chose stays.
+                val fields = if (old == null) mapOf("handle" to handle, "name" to name) else mapOf("handle" to handle)
+                t.set(db.collection("profiles").document(uid), fields, com.google.firebase.firestore.SetOptions.merge())
                 if (old != null && old != handle) t.delete(db.collection("handles").document(old))
                 null
             }.waitFor()
-            withContext(Dispatchers.Main) { myHandle = handle }
+            withContext(Dispatchers.Main) { myHandle = handle; if (old == null) myName = name }
             null
         } catch (e: Exception) {
             if (generateSequence(e as Throwable) { it.cause }.any { it.message == "taken" }) tr("That username is taken.") else tr("Couldn't save it. Check your connection.")
@@ -190,7 +222,7 @@ object Friends {
 
     private fun profile(uid: String): Person {
         val p = db().collection("profiles").document(uid).get(Source.SERVER).waitFor()
-        return Person(uid, p.getString("name").orEmpty(), p.getString("handle").orEmpty(), p.getString("photo"))
+        return Person(uid, p.getString("name").orEmpty(), p.getString("handle").orEmpty(), p.getString("photo"), p.getString("bio").orEmpty())
     }
 
     /** Reads who follows whom and sorts it into friends, requests and sent. */

@@ -67,25 +67,32 @@ object Inbox {
     }
 
     /** One look: notifications for what's new, then the notes go. */
-    suspend fun check(context: Context) = withContext(Dispatchers.IO) {
+    /** [notify]: also show notifications (not when the Activity page itself is looking). */
+    suspend fun check(context: Context, notify: Boolean = true) = withContext(Dispatchers.IO) {
         AppLanguage.applyInBackground(context)
         val me = try { FirebaseAuth.getInstance().currentUser?.uid } catch (_: Exception) { null } ?: return@withContext
         val notes = runCatching {
             Tasks.await(db().collection("users").document(me).collection("inbox").limit(50).get(Source.SERVER), 20, TimeUnit.SECONDS).documents
         }.getOrNull() ?: return@withContext
-        if (notes.isEmpty()) return@withContext
+        if (notes.isEmpty()) { ActivityLog.refreshUnread(context, me); return@withContext }
         val iFollow = runCatching {
             Tasks.await(db().collection("users").document(me).collection("following").get(Source.SERVER), 20, TimeUnit.SECONDS).documents.map { it.id }.toSet()
         }.getOrDefault(emptySet())
         val names = HashMap<String, String>()
         fun name(uid: String) = names.getOrPut(uid) { Friends.personNow(uid).title().ifBlank { tr("Someone") } }
-        val canShow = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        val canShow = notify && NotificationManagerCompat.from(context).areNotificationsEnabled()
         // One notification per thing: liking, unliking and liking again leaves two notes.
         val shown = HashSet<String>()
+        val logged = ArrayList<ActivityLog.Item>()
         for (n in notes) {
             val from = n.getString("from").orEmpty()
             val key = listOf(n.getString("type"), from, n.getString("post"), n.getString("comment")).joinToString("|")
-            if (canShow && from.isNotBlank() && !Friends.isBlocked(from) && shown.add(key)) {
+            val fresh = from.isNotBlank() && !Friends.isBlocked(from) && shown.add(key)
+            if (fresh) logged += ActivityLog.Item(
+                n.getString("type").orEmpty(), from, n.getString("text").orEmpty(), n.getString("owner").orEmpty(), n.getString("post").orEmpty(),
+                n.getTimestamp("at")?.toDate()?.time ?: System.currentTimeMillis(), accepted = n.getString("type") == "follow" && from in iFollow
+            )
+            if (canShow && fresh && SocialPrefs.on(context, SocialPrefs.kindOf(n.getString("type")))) {
                 val text = n.getString("text").orEmpty()
                 val (title, body) = when (n.getString("type")) {
                     "follow" -> if (from in iFollow) tr("{0} accepted your friend request", name(from)) to tr("You can see each other's training now.")
@@ -99,6 +106,7 @@ object Inbox {
             }
             runCatching { n.reference.delete() }
         }
+        ActivityLog.add(context, me, logged)
     }
 
     private fun show(context: Context, id: Int, title: String, body: String) {

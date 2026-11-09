@@ -106,6 +106,8 @@ await t('report as someone else', addDoc(collection(G, 'reports'), { by: 'frank'
 await t('report with extra field', addDoc(collection(G, 'reports'), { by: 'gina', uid: 'frank', reason: 'spam', at: serverTimestamp(), score: 9 }), false);
 await t('nobody reads reports', getDocs(collection(G, 'reports')), false);
 await t('anon reports', addDoc(collection(anon, 'reports'), { by: 'x', uid: 'frank', reason: 'spam', at: serverTimestamp() }), false);
+await t('alice sets a bio', setDoc(doc(A, 'profiles/alice'), { name: 'Alice', handle: 'alice', bio: 'Lifting since 2020' }), true);
+await t('bio too long', setDoc(doc(A, 'profiles/alice'), { name: 'Alice', handle: 'alice', bio: 'x'.repeat(151) }), false);
 // --- Replies and inbox notes ---
 const H = db('hank'), I = db('ivy'), J = db('jo');
 await follow(H, 'hank', 'ivy'); await follow(I, 'ivy', 'hank');

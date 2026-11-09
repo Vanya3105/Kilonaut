@@ -113,11 +113,12 @@ service cloud.firestore {
       }
     }
 
-    // Name, username and a small profile picture, so people can find and recognise each other.
+    // Name, username, a short bio and a small profile picture, so people can find and recognise each other.
     match /profiles/{uid} {
       allow read: if signedIn();
       allow create, update: if signedIn() && me() == uid
-        && request.resource.data.keys().hasOnly(['name', 'handle', 'photo'])
+        && request.resource.data.keys().hasOnly(['name', 'handle', 'photo', 'bio'])
+        && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 150))
         && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 60))
         && (!('photo' in request.resource.data) || (request.resource.data.photo is string && request.resource.data.photo.size() <= 150000));
       allow delete: if signedIn() && me() == uid;
