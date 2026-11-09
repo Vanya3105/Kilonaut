@@ -671,7 +671,7 @@ fun GymTrackerApp(
                         onOpenExercise = { openExercise = it },
                         onMergeExercises = { from, into -> mergeExercises(from, into) }
                     )
-                    AppTab.FEED -> FeedScreen(history = history)
+                    AppTab.FEED -> FeedScreen(history = history, active = selectedTab == AppTab.FEED)
                     AppTab.PROFILE -> SettingsScreen(
                         settings = settings,
                         userProfile = userProfile,
@@ -716,7 +716,8 @@ fun GymTrackerApp(
             BottomNavBar(selected = selectedTab, onSelect = { selectedTab = it })
         }
         // The tabs draw edge to edge; this keeps scrolled content from running under the clock.
-        StatusBarScrim()
+        // Not over the feed's posts: they run full screen under the clock, like a photo app.
+        if (!(selectedTab == AppTab.FEED && Feed.fullBleed)) StatusBarScrim()
 
         // Full-screen workout (live or editing a past one) slides up over the tabs.
         AnimatedVisibility(

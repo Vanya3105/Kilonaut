@@ -77,15 +77,15 @@ import kotlinx.coroutines.withContext
 // style of Hevy / Strava: who and when, the words, the photo full width, the workout as a block
 // of numbers and its top lifts, then the heart and the comment count.
 
-/** "now", "5m", "3h", "Yesterday", then the date. */
+/** Like Instagram's: "now", "5m", "3h", "2d", then the date ("Nov 2"). */
 internal fun postAge(at: Long, now: Long = System.currentTimeMillis()): String {
     val minutes = (now - at) / 60_000
     return when {
         minutes < 1 -> tr("now")
         minutes < 60 -> tr("{0}m", minutes)
-        minutes < 24 * 60 && android.text.format.DateUtils.isToday(at) -> tr("{0}h", minutes / 60)
-        android.text.format.DateUtils.isToday(at + android.text.format.DateUtils.DAY_IN_MILLIS) -> tr("Yesterday")
-        else -> DateUtils.formatDisplayDate(java.util.Date(at))
+        minutes < 24 * 60 -> tr("{0}h", minutes / 60)
+        minutes < 7 * 24 * 60 -> tr("{0}d", minutes / (24 * 60))
+        else -> DateUtils.formatShortDay(java.util.Date(at))
     }
 }
 
@@ -113,276 +113,12 @@ internal fun FullPage(title: String?, onClose: () -> Unit, actions: @Composable 
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FeedScreen(history: List<CompletedWorkout>) {
-    val P = LocalPalette.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val user = Account.user
-    var friendsOpen by remember { mutableStateOf(false) }
-    var composing by remember { mutableStateOf<ComposeStart?>(null) }
-    var openPost by remember { mutableStateOf<Feed.Post?>(null) }
-
-    LaunchedEffect(user?.uid) {
-        if (user != null) {
-            Friends.loadMe(context)
-            Feed.refresh(context)
-        }
-    }
-    val posts = Feed.posts
-    val handle = Friends.myHandle
-
-    PullToRefreshBox(
-        isRefreshing = Feed.loading && posts != null,
-        onRefresh = { scope.launch { Feed.refresh(context) } },
-        modifier = Modifier.fillMaxSize()
-    ) {
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 8.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(tr("Feed"), style = AppType.display, color = P.textPrimary, modifier = Modifier.weight(1f))
-                    Box {
-                        CircleIconButton(Icons.Rounded.Group, tr("Friends"), { friendsOpen = true })
-                        if (Friends.requestCount > 0) Box(
-                            Modifier.align(Alignment.TopEnd).size(10.dp).clip(CircleShape).background(P.accentPrimary).border(2.dp, P.bgPrimary, CircleShape)
-                        )
-                    }
-                    if (user != null && handle != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(P.accentPrimary).pressable { composing = ComposeStart(null) },
-                            contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Rounded.Add, tr("New post"), tint = P.onAccentPrimary, modifier = Modifier.size(24.dp)) }
-                    }
-                }
-            }
-            when {
-                user == null -> item {
-                    FeedMessage(Icons.Rounded.Group, tr("Your friends' training"), tr("Sign in and add friends to see their workouts and photos here, and share yours.")) {
-                        PrimaryButton(tr("Sign in"), { friendsOpen = true }, Modifier.fillMaxWidth())
-                    }
-                }
-                handle == null -> item {
-                    FeedMessage(Icons.Rounded.PersonAdd, tr("Set up Friends"), tr("Pick a username so friends can find you. Then their workouts and photos show up here.")) {
-                        PrimaryButton(tr("Pick a username"), { friendsOpen = true }, Modifier.fillMaxWidth())
-                    }
-                }
-                posts == null -> items(3) { PostSkeleton() }
-                posts.isEmpty() -> item {
-                    val last = history.maxByOrNull { it.id }
-                    FeedMessage(Icons.Rounded.FitnessCenter, tr("Nothing here yet"), tr("Share a workout or a photo, and add friends to see theirs.")) {
-                        if (last != null) PrimaryButton(tr("Share your last workout"), { composing = ComposeStart(last) }, Modifier.fillMaxWidth())
-                        Spacer(Modifier.height(8.dp))
-                        SecondaryButton(tr("Find friends"), { friendsOpen = true }, Modifier.fillMaxWidth(), icon = Icons.Rounded.PersonAdd)
-                    }
-                }
-                else -> items(posts, key = { it.author.uid + "/" + it.id }) { post ->
-                    PostCard(post, onOpen = { openPost = post })
-                }
-            }
-        }
-    }
-
-    if (friendsOpen) FullPage(tr("Friends"), onClose = { friendsOpen = false; scope.launch { Feed.refresh(context) } }) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) { FriendsSection() }
-    }
-    composing?.let { start -> PostComposer(start.workout, history, onClose = { composing = null }) }
-    openPost?.let { p ->
-        // Follow the feed's copy, so likes and counts stay in step.
-        val live = Feed.posts?.firstOrNull { it.id == p.id && it.author.uid == p.author.uid } ?: p
-        PostPage(live, onClose = { openPost = null })
-    }
-}
-
 /** What the composer starts with (a workout from the finish screen, or nothing). */
 data class ComposeStart(val workout: CompletedWorkout?)
 
-@Composable
-private fun FeedMessage(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, actions: @Composable ColumnScope.() -> Unit) {
-    val P = LocalPalette.current
-    AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(24.dp)) {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(64.dp).clip(CircleShape).background(P.accentSoft), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = P.accentPrimary, modifier = Modifier.size(30.dp))
-            }
-            Spacer(Modifier.height(14.dp))
-            Text(title, style = AppType.title, color = P.textPrimary)
-            Spacer(Modifier.height(4.dp))
-            Text(body, style = AppType.body, color = P.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Spacer(Modifier.height(18.dp))
-            actions()
-        }
-    }
-}
-
-@Composable
-private fun PostSkeleton() {
-    val P = LocalPalette.current
-    AppCard(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).clip(CircleShape).background(P.bgControl))
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Box(Modifier.size(120.dp, 12.dp).clip(RoundedCornerShape(6.dp)).background(P.bgControl))
-                Spacer(Modifier.height(6.dp))
-                Box(Modifier.size(70.dp, 10.dp).clip(RoundedCornerShape(5.dp)).background(P.bgControl))
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Box(Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(16.dp)).background(P.bgControl))
-    }
-}
-
-/** One post: who and when, words, photo (double-tap to like), workout, then heart and comments. */
-@Composable
-private fun PostCard(post: Feed.Post, onOpen: (() -> Unit)?, full: Boolean = false) {
-    val P = LocalPalette.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var menu by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    val liked = post.likedByMe()
-    val heartPop = remember { Animatable(0f) }
-    val toggleLike = { on: Boolean ->
-        scope.launch { if (!Feed.like(post, on)) AppSnackbar.show(tr("Couldn't do that. Check your connection.")) }
-        Unit
-    }
-
-    AppCard(Modifier.fillMaxWidth(), onClick = onOpen, contentPadding = PaddingValues(0.dp)) {
-        // Who and when.
-        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            PersonAvatar(post.author, 40.dp)
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f)) {
-                Text(post.author.title(), style = AppType.bodyStrong, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    listOfNotNull(post.author.handle.takeIf { it.isNotBlank() && post.author.name.isNotBlank() }?.let { "@$it" }, postAge(post.createdAt)).joinToString(" · "),
-                    style = AppType.caption, color = P.textSecondary, maxLines = 1
-                )
-            }
-            if (post.mine) Box {
-                CircleIconButton(Icons.Rounded.MoreHoriz, tr("More"), { menu = true }, size = 36.dp, tint = P.textSecondary, container = Color.Transparent)
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                    DropdownMenuItem(
-                        text = { Text(tr("Delete post"), style = AppType.body, color = P.dangerText) },
-                        onClick = { menu = false; confirmDelete = true }
-                    )
-                }
-            }
-        }
-
-        if (post.text.isNotBlank()) Text(
-            post.text, style = AppType.body, color = P.textPrimary,
-            maxLines = if (full) Int.MAX_VALUE else 6, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)
-        )
-
-        Feed.image(post.photo)?.let { img ->
-            val ratio = (img.width.toFloat() / img.height).coerceIn(0.8f, 1.9f)
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(ratio).background(P.bgControl)
-                    .pointerInput(post.id) {
-                        detectTapGestures(
-                            onTap = { onOpen?.invoke() },
-                            onDoubleTap = {
-                                if (!post.likedByMe()) toggleLike(true)
-                                scope.launch {
-                                    heartPop.snapTo(0f)
-                                    heartPop.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow))
-                                    kotlinx.coroutines.delay(350)
-                                    heartPop.animateTo(0f, tween(220))
-                                }
-                            }
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Image(img, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                // The heart that pops on a double-tap.
-                Icon(
-                    Icons.Rounded.Favorite, null, tint = Color.White,
-                    modifier = Modifier.size(96.dp).graphicsLayer {
-                        scaleX = 0.6f + 0.4f * heartPop.value; scaleY = scaleX; alpha = heartPop.value.coerceIn(0f, 1f) * 0.95f
-                    }
-                )
-            }
-        }
-
-        post.workout?.let { w ->
-            Spacer(Modifier.height(if (post.photo != null) 12.dp else 0.dp))
-            WorkoutBlock(w, full)
-        }
-
-        // Heart, comments, who liked it.
-        Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 14.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            val scale = remember { Animatable(1f) }
-            LaunchedEffect(liked) {
-                if (liked) {
-                    scale.snapTo(0.7f)
-                    scale.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium))
-                }
-            }
-            Row(
-                Modifier.clip(RoundedCornerShape(50)).pressable { toggleLike(!liked) }.padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    if (liked) tr("Unlike") else tr("Like"),
-                    tint = if (liked) Color(0xFFE5484D) else P.textSecondary,
-                    modifier = Modifier.size(24.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }
-                )
-                if (post.likes.isNotEmpty()) {
-                    Spacer(Modifier.width(6.dp))
-                    Text("${post.likes.size}", style = AppType.label.copy(fontFeatureSettings = "tnum"), color = P.textPrimary)
-                }
-            }
-            Row(
-                Modifier.clip(RoundedCornerShape(50)).pressable { onOpen?.invoke() }.padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Rounded.ChatBubbleOutline, tr("Comments"), tint = P.textSecondary, modifier = Modifier.size(22.dp))
-                if (post.comments > 0) {
-                    Spacer(Modifier.width(6.dp))
-                    Text("${post.comments}", style = AppType.label.copy(fontFeatureSettings = "tnum"), color = P.textPrimary)
-                }
-            }
-        }
-        val likers = post.likes.mapNotNull { uid -> if (uid == Feed.me()) tr("you") else Feed.people[uid]?.title() }
-        if (post.likes.isNotEmpty()) Text(
-            when {
-                likers.isEmpty() -> if (post.likes.size == 1) tr("1 like") else tr("{0} likes", post.likes.size)
-                post.likes.size == 1 -> tr("Liked by {0}", likers[0])
-                else -> tr("Liked by {0} and {1} more", likers[0], post.likes.size - 1)
-            },
-            style = AppType.caption, color = P.textSecondary, modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-    }
-
-    if (confirmDelete) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { confirmDelete = false },
-        containerColor = P.bgElevated,
-        title = { Text(tr("Delete this post?"), style = AppType.headline, color = P.textPrimary) },
-        text = { Text(tr("Its likes and comments go with it."), style = AppType.body, color = P.textSecondary) },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                confirmDelete = false
-                scope.launch { if (!Feed.delete(context, post)) AppSnackbar.show(tr("Couldn't do that. Check your connection.")) }
-            }) { Text(tr("Delete"), color = P.dangerText, style = AppType.label) }
-        },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDelete = false }) { Text(tr("Cancel"), color = P.textSecondary, style = AppType.label) } }
-    )
-}
-
 /** A workout in a post: the day, its numbers, and its lifts with their best sets (yours in your units). */
 @Composable
-private fun WorkoutBlock(w: WorkoutPost, full: Boolean) {
+internal fun WorkoutBlock(w: WorkoutPost, full: Boolean) {
     val P = LocalPalette.current
     Column(Modifier.padding(horizontal = 14.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(P.bgControl).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,110 +176,13 @@ private fun WorkoutBlock(w: WorkoutPost, full: Boolean) {
     }
 }
 
-/** A post on its own page: everything in it, all its comments, and a box to add one. */
-@Composable
-private fun PostPage(post: Feed.Post, onClose: () -> Unit) {
-    val P = LocalPalette.current
-    val scope = rememberCoroutineScope()
-    var comments by remember { mutableStateOf<List<Feed.Comment>?>(null) }
-    var text by remember { mutableStateOf("") }
-    var sending by remember { mutableStateOf(false) }
-    LaunchedEffect(post.id) { comments = Feed.comments(post) }
-    val people = Feed.people
-
-    FullPage(
-        null, onClose = onClose,
-        bottomBar = {
-            Row(
-                Modifier.fillMaxWidth().background(P.bgCard).padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(P.bgControl).padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(Modifier.weight(1f)) {
-                        if (text.isEmpty()) Text(tr("Add a comment…"), style = AppType.body, color = P.textTertiary)
-                        BasicTextField(
-                            value = text, onValueChange = { text = it.take(500) },
-                            textStyle = AppType.body.copy(color = P.textPrimary), cursorBrush = SolidColor(P.accentPrimary),
-                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                            maxLines = 4, modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                val canSend = text.isNotBlank() && !sending
-                Box(
-                    Modifier.size(44.dp).clip(CircleShape).background(if (canSend) P.accentPrimary else P.bgControl)
-                        .pressable(enabled = canSend) {
-                            sending = true
-                            scope.launch {
-                                if (Feed.comment(post, text)) {
-                                    text = ""
-                                    comments = Feed.comments(post)
-                                } else AppSnackbar.show(tr("Couldn't send it. Check your connection."))
-                                sending = false
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) { Icon(Icons.AutoMirrored.Rounded.Send, tr("Send"), tint = if (canSend) P.onAccentPrimary else P.textTertiary, modifier = Modifier.size(20.dp)) }
-            }
-        }
-    ) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
-            item { PostCard(post, onOpen = null, full = true) }
-            item {
-                Text(
-                    if (post.comments == 1) tr("1 comment") else tr("{0} comments", post.comments),
-                    style = AppType.overline, color = P.textSecondary, modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp)
-                )
-            }
-            val list = comments
-            when {
-                list == null -> item { Text(tr("Loading…"), style = AppType.body, color = P.textSecondary, modifier = Modifier.padding(4.dp)) }
-                list.isEmpty() -> item { Text(tr("No comments yet. Say something nice."), style = AppType.body, color = P.textSecondary, modifier = Modifier.padding(4.dp)) }
-                else -> items(list, key = { it.id }) { c ->
-                    val who = people[c.uid] ?: Friends.Person(c.uid, "", tr("someone"))
-                    var menu by remember { mutableStateOf(false) }
-                    val canDelete = c.uid == Feed.me() || post.mine
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
-                        PersonAvatar(who, 34.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(P.bgCard).padding(horizontal = 12.dp, vertical = 9.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(who.title(), style = AppType.label, color = P.textPrimary, modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Spacer(Modifier.width(6.dp))
-                                Text(postAge(c.at), style = AppType.caption, color = P.textTertiary)
-                            }
-                            Text(c.text, style = AppType.body, color = P.textPrimary)
-                        }
-                        if (canDelete) Box {
-                            CircleIconButton(Icons.Rounded.MoreHoriz, tr("More"), { menu = true }, size = 32.dp, tint = P.textTertiary, container = Color.Transparent)
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                                DropdownMenuItem(
-                                    text = { Text(tr("Delete comment"), style = AppType.body, color = P.dangerText) },
-                                    onClick = {
-                                        menu = false
-                                        scope.launch { if (Feed.deleteComment(post, c)) comments = comments?.filter { it.id != c.id } }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** The composer with [workout] attached, for the finish screen's Share to feed. */
 @Composable
 fun ShareWorkoutComposer(workout: CompletedWorkout?, history: List<CompletedWorkout>, onClose: () -> Unit) = PostComposer(workout, history, onClose)
 
 /** A new post: a few words, a photo, a workout; any of them. */
 @Composable
-private fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorkout>, onClose: () -> Unit) {
+internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorkout>, onClose: () -> Unit) {
     val P = LocalPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

@@ -96,7 +96,7 @@ object Feed {
         val comments: Int
     ) {
         val mine: Boolean get() = author.uid == me()
-        fun likedByMe() = me() in likes
+        fun likedByMe() = (if (demo) "demo-me" else me()) in likes
     }
 
     data class Comment(val id: String, val uid: String, val text: String, val at: Long)
@@ -115,7 +115,62 @@ object Feed {
     private fun posts(uid: String) = db().collection("users").document(uid).collection("posts")
 
     fun signedOut() {
-        posts = null; people = emptyMap()
+        posts = null; people = emptyMap(); demo = false
+    }
+
+    /**
+     * Debug builds only: sample posts (long-press "Feed"), to feel the swiping, likes and comments
+     * without accounts. Nothing is sent anywhere.
+     */
+    var demo by mutableStateOf(false)
+        private set
+
+    /** The feed is showing posts full screen (the app's status-bar backdrop steps aside). */
+    var fullBleed by mutableStateOf(false)
+    private val demoComments = HashMap<String, MutableList<Comment>>()
+
+    fun showDemo() {
+        val now = System.currentTimeMillis()
+        val maya = Friends.Person("demo-maya", "Maya Cohen", "maya.lifts")
+        val dan = Friends.Person("demo-dan", "Dan Levi", "danl")
+        val noa = Friends.Person("demo-noa", "Noa", "noa_runs")
+        val bench = WorkoutPost(
+            "Push A", now - 2 * 3_600_000, 3720, 18, 6240, 2,
+            listOf(
+                PostExercise("Barbell Bench Press", ExerciseType.WEIGHT_REPS, 4, SetEntry(1, "85", "6", isCompleted = true), true),
+                PostExercise("Overhead Press", ExerciseType.WEIGHT_REPS, 3, SetEntry(1, "52.5", "8", isCompleted = true), false),
+                PostExercise("Cable Fly", ExerciseType.WEIGHT_REPS, 3, SetEntry(1, "15", "12", isCompleted = true), false),
+                PostExercise("Triceps Pushdown", ExerciseType.WEIGHT_REPS, 3, SetEntry(1, "30", "12", isCompleted = true), true),
+                PostExercise("Lateral Raise", ExerciseType.WEIGHT_REPS, 3, SetEntry(1, "10", "15", isCompleted = true), false)
+            )
+        )
+        val legs = bench.copy(title = "Legs A", kg = 9120, bests = 1, exercises = listOf(
+            PostExercise("Back Squat", ExerciseType.WEIGHT_REPS, 4, SetEntry(1, "120", "5", isCompleted = true), true),
+            PostExercise("Romanian Deadlift", ExerciseType.WEIGHT_REPS, 3, SetEntry(1, "100", "8", isCompleted = true), false),
+            PostExercise("Leg Press", ExerciseType.WEIGHT_REPS, 3, SetEntry(1, "180", "10", isCompleted = true), false),
+            PostExercise("Plank", ExerciseType.DURATION, 2, SetEntry(1, "", "", isCompleted = true, seconds = "75"), false)
+        ))
+        demoComments.clear()
+        demoComments["d1"] = mutableListOf(Comment("c1", dan.uid, "Monster!", now - 3_000_000), Comment("c2", noa.uid, "Form looked clean", now - 1_000_000))
+        posts = listOf(
+            Post("d1", maya, now - 2 * 3_600_000, "New bench best. Finally 85 for six", demoPhoto(), bench, listOf(dan.uid, noa.uid), 2),
+            Post("d2", dan, now - 20 * 60_000, "", null, legs, listOf(maya.uid), 0),
+            Post("d3", noa, now - 26 * 3_600_000, "Rest day. Walked 12k steps and slept 9 hours. Back at it tomorrow.", null, null, emptyList(), 0),
+            Post("d4", maya, now - 3 * 24 * 3_600_000, "Sunday session done", demoPhoto(0xFF2E4057.toInt(), 0xFF0B1320.toInt()), null, emptyList(), 0)
+        )
+        people = listOf(maya, dan, noa, Friends.Person("demo-me", tr("You"), "")).associateBy { it.uid }
+        demo = true
+    }
+
+    /** A stand-in photo: a soft gradient with a floor and a light, like a gym corner. */
+    private fun demoPhoto(top: Int = 0xFF8A6A55.toInt(), bottom: Int = 0xFF2B2522.toInt()): String {
+        val bmp = Bitmap.createBitmap(1080, 1350, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(bmp)
+        c.drawPaint(android.graphics.Paint().apply { shader = android.graphics.LinearGradient(0f, 0f, 0f, 1350f, top, bottom, android.graphics.Shader.TileMode.CLAMP) })
+        c.drawCircle(780f, 260f, 160f, android.graphics.Paint().apply { color = 0x55FFFFFF; maskFilter = android.graphics.BlurMaskFilter(80f, android.graphics.BlurMaskFilter.Blur.NORMAL) })
+        val out = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 
     /** Reads the latest posts of you and your friends, newest first. False when it couldn't. */
@@ -199,6 +254,10 @@ object Feed {
 
     /** Likes or unlikes; the feed shows it at once and goes back if it fails. */
     suspend fun like(post: Post, on: Boolean): Boolean {
+        if (demo) {
+            posts = posts?.map { if (it.id == post.id) it.copy(likes = if (on) it.likes + "demo-me" else it.likes - "demo-me") else it }
+            return true
+        }
         val uid = me() ?: return false
         fun update(change: (List<String>) -> List<String>) {
             posts = posts?.map { if (it.id == post.id && it.author.uid == post.author.uid) it.copy(likes = change(it.likes)) else it }
@@ -218,6 +277,7 @@ object Feed {
     }
 
     suspend fun comments(post: Post): List<Comment>? = withContext(Dispatchers.IO) {
+        if (demo) return@withContext demoComments[post.id].orEmpty().toList()
         try {
             posts(post.author.uid).document(post.id).collection("comments").orderBy("at").get(Source.SERVER).waitFor().documents.map {
                 Comment(it.id, it.getString("uid").orEmpty(), it.getString("text").orEmpty(), it.getTimestamp("at")?.toDate()?.time ?: System.currentTimeMillis())
@@ -228,6 +288,11 @@ object Feed {
     }
 
     suspend fun comment(post: Post, text: String): Boolean = withContext(Dispatchers.IO) {
+        if (demo) {
+            demoComments.getOrPut(post.id) { mutableListOf() } += Comment("c${System.nanoTime()}", "demo-me", text.trim(), System.currentTimeMillis())
+            withContext(Dispatchers.Main) { bump(post, +1) }
+            return@withContext true
+        }
         val uid = me() ?: return@withContext false
         val clean = text.trim().take(500)
         if (clean.isEmpty()) return@withContext false
