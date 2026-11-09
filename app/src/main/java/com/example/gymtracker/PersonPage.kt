@@ -100,6 +100,10 @@ fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var viewing by remember { mutableStateOf<Int?>(null) }
     var menu by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<ReportTarget?>(null) }
+    var blocking by remember { mutableStateOf(false) }
+    reporting?.let { ReportSheet(it, onDismiss = { reporting = null }) }
+    if (blocking) BlockDialog(person, onDismiss = { blocking = false }, onBlocked = onClose)
     val hue = hueFor(person.uid)
     val photo = if (relation == Relation.ME) ProfilePhoto.mine else ProfilePhoto.decode(person.photo)
     val grid = rememberLazyGridState()
@@ -164,11 +168,11 @@ fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
                     person.title(), style = AppType.title, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).graphicsLayer { alpha = bar; translationY = (1f - bar) * 12.dp.toPx() }
                 )
-                if (relation == Relation.FRIEND && !Feed.demo) Box {
+                if (relation != Relation.ME && !Feed.demo) Box {
                     FrostedButton(Icons.Rounded.MoreVert, tr("More"), solid = bar) { menu = true }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                        DropdownMenuItem(
-                            text = { Text(tr("Remove friend"), style = AppType.body, color = P.dangerText) },
+                        if (relation == Relation.FRIEND) DropdownMenuItem(
+                            text = { Text(tr("Remove friend"), style = AppType.body) },
                             onClick = {
                                 menu = false
                                 scope.launch {
@@ -177,6 +181,14 @@ fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
                                     onClose()
                                 }
                             }
+                        )
+                        DropdownMenuItem(text = { Text(tr("Report"), style = AppType.body) }, onClick = { menu = false; reporting = ReportTarget(person) })
+                        if (Friends.isBlocked(person.uid)) DropdownMenuItem(
+                            text = { Text(tr("Unblock"), style = AppType.body) },
+                            onClick = { menu = false; scope.launch { Friends.unblock(person.uid) } }
+                        ) else DropdownMenuItem(
+                            text = { Text(tr("Block"), style = AppType.body, color = P.dangerText) },
+                            onClick = { menu = false; blocking = true }
                         )
                     }
                 }

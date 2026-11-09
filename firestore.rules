@@ -11,6 +11,8 @@ service cloud.firestore {
     // You, or a friend of [uid] (you follow each other).
     function canSee(uid) { return me() == uid || (follows(uid, me()) && follows(me(), uid)); }
     function postExists(uid, post) { return exists(/databases/$(database)/documents/users/$(uid)/posts/$(post)); }
+    // [a] blocked [b].
+    function blockedBy(a, b) { return exists(/databases/$(database)/documents/users/$(a)/blocked/$(b)); }
 
     // Workouts, weigh-ins and the plan: only the owner.
     match /users/{uid}/{collection}/{doc} {
@@ -20,15 +22,35 @@ service cloud.firestore {
     // Who you follow: you add and remove it; the person you follow can see it and remove it (declining).
     match /users/{uid}/following/{other} {
       allow read: if signedIn() && (me() == uid || me() == other);
-      allow create: if signedIn() && me() == uid && other != uid && request.resource.data.uid == other;
+      allow create: if signedIn() && me() == uid && other != uid && request.resource.data.uid == other
+        && !blockedBy(other, uid);
       allow delete: if signedIn() && (me() == uid || me() == other);
     }
 
     // Your followers: each follower writes their own entry here when they follow you.
     match /users/{uid}/followers/{other} {
       allow read: if signedIn() && (me() == uid || me() == other);
-      allow create: if signedIn() && me() == other && other != uid && request.resource.data.uid == other;
+      allow create: if signedIn() && me() == other && other != uid && request.resource.data.uid == other
+        && !blockedBy(uid, other);
       allow delete: if signedIn() && (me() == uid || me() == other);
+    }
+
+    // Who you blocked: yours alone.
+    match /users/{uid}/blocked/{other} {
+      allow read, delete: if signedIn() && me() == uid;
+      allow create: if signedIn() && me() == uid && other != uid && request.resource.data.keys().hasOnly(['at']);
+    }
+
+    // Reports to the app's makers: anyone signed in can file one as themselves; nobody reads them
+    // in the app (they're read in the Firebase console).
+    match /reports/{report} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['by', 'uid', 'post', 'comment', 'reason', 'text', 'at'])
+        && request.resource.data.by == me()
+        && request.resource.data.uid is string
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 40
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 600))
+        && request.resource.data.at == request.time;
     }
 
     // What friends see: written by you, read by you and by people you follow who follow you back.

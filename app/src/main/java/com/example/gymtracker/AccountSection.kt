@@ -45,6 +45,7 @@ fun AccountSection() {
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { Account.start(context) }
     val user = Account.user
+    var deletingAccount by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
 
     if (user == null) {
@@ -106,7 +107,12 @@ fun AccountSection() {
                 modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable { confirmSignOut = true }.padding(horizontal = 16.dp, vertical = 10.dp)
             )
         }
+        Text(
+            tr("Delete account"), style = AppType.label, color = P.dangerText,
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable { deletingAccount = true }.padding(end = 16.dp, top = 6.dp, bottom = 10.dp)
+        )
     }
+    if (deletingAccount) DeleteAccountDialog(onDismiss = { deletingAccount = false })
 
     if (confirmSignOut) {
         AlertDialog(
@@ -526,3 +532,86 @@ private object AvatarCache {
     }
 }
 
+/**
+ * Delete account: what goes, whether the phone keeps its copy, then confirming who you are (your
+ * password, or Google's picker) and the delete itself. Nothing is deleted until you're confirmed.
+ */
+@Composable
+private fun DeleteAccountDialog(onDismiss: () -> Unit) {
+    val P = LocalPalette.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val google = Account.user?.viaGoogle == true
+    var wipePhone by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        containerColor = P.bgElevated,
+        title = { Text(tr("Delete your account?"), style = AppType.headline, color = P.textPrimary) },
+        text = {
+            Column {
+                Text(
+                    tr("This deletes your account and everything in it: your training in the cloud, your username, profile picture, posts, comments and likes. It can't be undone."),
+                    style = AppType.body, color = P.textSecondary
+                )
+                Spacer(Modifier.height(14.dp))
+                listOf(false to tr("Keep my training on this phone"), true to tr("Also delete it from this phone")).forEach { (wipe, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).pressable(enabled = !busy) { wipePhone = wipe }.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = wipePhone == wipe, onClick = { wipePhone = wipe }, enabled = !busy,
+                            colors = androidx.compose.material3.RadioButtonDefaults.colors(selectedColor = P.accentPrimary)
+                        )
+                        Text(label, style = AppType.body, color = P.textPrimary)
+                    }
+                }
+                if (!google) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = password, onValueChange = { password = it; error = null },
+                        label = { Text(tr("Your password")) }, singleLine = true, enabled = !busy,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        textStyle = AppType.body.copy(color = P.textPrimary), shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = P.accentPrimary, unfocusedBorderColor = P.borderStrong),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Spacer(Modifier.height(4.dp))
+                    Text(tr("To confirm it's you, choose your Google account next."), style = AppType.caption, color = P.textTertiary)
+                }
+                error?.let { Text(it, style = AppType.caption, color = P.dangerText, modifier = Modifier.padding(top = 8.dp)) }
+                if (busy) Text(tr("Deleting… keep the app open."), style = AppType.caption, color = P.textSecondary, modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && (google || password.isNotEmpty()), onClick = {
+                busy = true
+                error = null
+                scope.launch {
+                    val problem = AccountDeletion.confirm(context, password.takeIf { !google }) ?: AccountDeletion.deleteEverything(context)
+                    if (problem != null) {
+                        busy = false
+                        error = problem
+                        return@launch
+                    }
+                    if (wipePhone) {
+                        // As Advanced → Delete all data: pending writes first, then everything (the app closes).
+                        if (LocalStorage.isHealthSyncOn(context)) HealthSync.revokeAll(context)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LocalStorage.flush(context) }
+                        context.getSystemService(android.app.ActivityManager::class.java)?.clearApplicationUserData()
+                    } else {
+                        Account.signOut(context)
+                        onDismiss()
+                        AppSnackbar.show(tr("Your account is deleted. Your training stays on this phone."))
+                    }
+                }
+            }) { Text(if (busy) tr("Deleting…") else tr("Delete account"), color = P.dangerText, style = AppType.label) }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(tr("Cancel"), color = P.textSecondary, style = AppType.label) } }
+    )
+}

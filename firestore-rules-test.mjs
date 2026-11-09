@@ -1,5 +1,5 @@
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc, writeBatch, collection, getDocs, serverTimestamp, getCountFromServer, query, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, writeBatch, collection, getDocs, addDoc, serverTimestamp, getCountFromServer, query, orderBy, limit } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 const env = await initializeTestEnvironment({ projectId: 'demo-kilonaut', firestore: { rules: readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8089 } });
 const db = (uid) => (uid ? env.authenticatedContext(uid) : env.unauthenticatedContext()).firestore();
@@ -90,5 +90,19 @@ await t('friend deletes post', deleteDoc(doc(E, 'users/dave/posts/p1')), false);
 await t('author deletes post', deleteDoc(doc(D, 'users/dave/posts/p1')), true);
 await t('after unfollow, no reading', writeBatch(E).delete(doc(E, 'users/erin/following/dave')).delete(doc(E, 'users/dave/followers/erin')).commit()
   .then(() => getDoc(doc(E, 'users/dave/posts/p2'))), false);
+// --- Block and report ---
+const F = db('frank'), G = db('gina');
+await t('frank blocks gina', setDoc(doc(F, 'users/frank/blocked/gina'), { at: serverTimestamp() }), true);
+await t('gina reads frank blocks', getDocs(collection(G, 'users/frank/blocked')), false);
+await t('gina writes frank block list', setDoc(doc(G, 'users/frank/blocked/x'), { at: serverTimestamp() }), false);
+await t('blocked gina cannot follow frank', follow(G, 'gina', 'frank'), false);
+await t('the blocker can still follow (his choice)', follow(F, 'frank', 'gina'), true);
+await t('frank unblocks', deleteDoc(doc(F, 'users/frank/blocked/gina')), true);
+await t('after unblock gina can follow', follow(G, 'gina', 'frank'), true);
+await t('report as yourself', addDoc(collection(G, 'reports'), { by: 'gina', uid: 'frank', post: 'users/frank/posts/p', reason: 'spam', text: 'x', at: serverTimestamp() }), true);
+await t('report as someone else', addDoc(collection(G, 'reports'), { by: 'frank', uid: 'gina', reason: 'spam', at: serverTimestamp() }), false);
+await t('report with extra field', addDoc(collection(G, 'reports'), { by: 'gina', uid: 'frank', reason: 'spam', at: serverTimestamp(), score: 9 }), false);
+await t('nobody reads reports', getDocs(collection(G, 'reports')), false);
+await t('anon reports', addDoc(collection(anon, 'reports'), { by: 'x', uid: 'frank', reason: 'spam', at: serverTimestamp() }), false);
 console.log(`${n - bad}/${n} rule checks passed`);
 await env.cleanup();

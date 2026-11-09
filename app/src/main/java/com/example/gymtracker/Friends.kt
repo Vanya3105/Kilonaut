@@ -133,8 +133,14 @@ object Friends {
     private fun <T> Task<T>.waitFor(): T = Tasks.await(this, 20, TimeUnit.SECONDS)
 
     fun signedOut() {
-        myHandle = null; circle = null; requestCount = 0
+        myHandle = null; circle = null; requestCount = 0; blocked = emptyList()
     }
+
+    /** People you blocked (users/{me}/blocked): no follows either way, their comments hidden. */
+    var blocked by mutableStateOf<List<Person>>(emptyList())
+        private set
+
+    fun isBlocked(uid: String) = blocked.any { it.uid == uid }
 
     /** Your username, or null when none is picked yet; also brings your photo in line with the account's. */
     suspend fun loadMe(context: Context): String? = withContext(Dispatchers.IO) {
@@ -192,14 +198,16 @@ object Friends {
         val uid = me() ?: return@withContext null
         try {
             val user = db().collection("users").document(uid)
-            val following = user.collection("following").get(Source.SERVER).waitFor().documents.map { it.id }.toSet()
-            val followers = user.collection("followers").get(Source.SERVER).waitFor().documents.map { it.id }.toSet()
+            val blockedIds = runCatching { user.collection("blocked").get(Source.SERVER).waitFor().documents.map { it.id }.toSet() }.getOrDefault(emptySet())
+            val following = user.collection("following").get(Source.SERVER).waitFor().documents.map { it.id }.toSet() - blockedIds
+            val followers = user.collection("followers").get(Source.SERVER).waitFor().documents.map { it.id }.toSet() - blockedIds
             val people = (following + followers).associateWith { runCatching { profile(it) }.getOrElse { _ -> Person(it, "", "") } }
             fun list(ids: Set<String>) = ids.mapNotNull { people[it] }.sortedBy { it.name.lowercase() }
             val friendIds = following intersect followers
             val stats = friendIds.mapNotNull { id -> statsNow(id)?.let { id to it } }.toMap()
             val c = Circle(list(friendIds), list(followers - following), list(following - followers), stats)
-            withContext(Dispatchers.Main) { circle = c; requestCount = c.requests.size }
+            val blockedPeople = blockedIds.map { runCatching { profile(it) }.getOrElse { _ -> Person(it, "", "") } }.sortedBy { it.title().lowercase() }
+            withContext(Dispatchers.Main) { circle = c; requestCount = c.requests.size; blocked = blockedPeople }
             c
         } catch (_: Exception) {
             null
@@ -213,6 +221,42 @@ object Friends {
             .set(db.collection("users").document(uid).collection("following").document(other), mapOf("uid" to other, "at" to at))
             .set(db.collection("users").document(other).collection("followers").document(uid), mapOf("uid" to uid, "at" to at))
             .commit()
+    }
+
+    /** Blocks [other]: ends every follow between you, and the rules keep them from following you again. */
+    suspend fun block(other: String): Boolean = change { db, uid ->
+        val me = db.collection("users").document(uid)
+        val them = db.collection("users").document(other)
+        db.batch()
+            .set(me.collection("blocked").document(other), mapOf("at" to FieldValue.serverTimestamp()))
+            .delete(me.collection("following").document(other))
+            .delete(them.collection("followers").document(uid))
+            .delete(me.collection("followers").document(other))
+            .delete(them.collection("following").document(uid))
+            .commit()
+    }
+
+    suspend fun unblock(other: String): Boolean = change { db, uid ->
+        db.collection("users").document(uid).collection("blocked").document(other).delete()
+    }
+
+    /**
+     * Reports [person] (and a post or comment of theirs) to the app's makers. Reports can only be
+     * written, never read in the app; they're read in the Firebase console.
+     */
+    suspend fun report(person: String, reason: String, postPath: String? = null, commentId: String? = null, excerpt: String = ""): Boolean = withContext(Dispatchers.IO) {
+        val uid = me() ?: return@withContext false
+        try {
+            val data = hashMapOf<String, Any>(
+                "by" to uid, "uid" to person, "reason" to reason.take(40), "text" to excerpt.take(600), "at" to FieldValue.serverTimestamp()
+            )
+            postPath?.let { data["post"] = it }
+            commentId?.let { data["comment"] = it }
+            db().collection("reports").add(data).waitFor()
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /** Stop following (unfriend, or take back a request). */

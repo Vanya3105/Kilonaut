@@ -257,6 +257,22 @@ fun FriendsSection() {
             }
         }
 
+        if (Friends.blocked.isNotEmpty()) Section(tr("Blocked")) {
+            AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)) {
+                Friends.blocked.forEach { p ->
+                    Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        PersonAvatar(p, 36.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text(p.title(), style = AppType.body, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(
+                            tr("Unblock"), style = AppType.label, color = P.textSecondary,
+                            modifier = Modifier.clip(RoundedCornerShape(10.dp)).pressable { scope.launch { Friends.unblock(p.uid) } }.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         if (c == null && loaded) Text(tr("Couldn't load your friends. Check your connection."), style = AppType.body, color = P.textSecondary)
         Text(
             tr("Friends see your workouts, streak and best sets. Never your body weight, notes or photos."),
@@ -437,6 +453,7 @@ private fun FindPeople(myHandle: String) {
                     }
                     val c = Friends.circle
                     when {
+                        Friends.isBlocked(p.uid) -> SmallButton(tr("Unblock"), null) { scope.launch { Friends.unblock(p.uid) } }
                         c?.friends?.any { it.uid == p.uid } == true -> Pill(tr("Friends"), icon = Icons.Rounded.Check)
                         c?.sent?.any { it.uid == p.uid } == true -> Pill(tr("Requested"))
                         else -> SmallButton(if (c?.requests?.any { it.uid == p.uid } == true) tr("Accept") else tr("Follow"), Icons.Rounded.PersonAdd) {

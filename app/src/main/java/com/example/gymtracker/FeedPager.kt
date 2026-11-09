@@ -390,6 +390,8 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
     val liked = post.likedByMe()
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<ReportTarget?>(null) }
+    var blocking by remember { mutableStateOf(false) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Box(Modifier.clip(CircleShape).border(2.dp, White, CircleShape).padding(2.dp).clip(CircleShape).pressable(onClick = onPerson)) { PersonAvatar(post.author, 44.dp) }
 
@@ -409,13 +411,23 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
             icon = Icons.Rounded.ChatBubble, tint = White,
             label = if (post.comments == 0) null else "${post.comments}", description = tr("Comments")
         ) { onComments() }
-        if (post.mine) Box {
+        Box {
             RailButton(icon = Icons.Rounded.MoreHoriz, tint = White, label = null, description = tr("More")) { menu = true }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                DropdownMenuItem(text = { Text(tr("Delete post"), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; confirmDelete = true })
+                if (post.mine) {
+                    DropdownMenuItem(text = { Text(tr("Delete post"), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; confirmDelete = true })
+                } else {
+                    DropdownMenuItem(text = { Text(tr("Report post"), style = AppType.body) }, onClick = {
+                        menu = false
+                        reporting = ReportTarget(post.author, Feed.pathOf(post), excerpt = post.text)
+                    })
+                    DropdownMenuItem(text = { Text(tr("Block {0}", post.author.title()), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; blocking = true })
+                }
             }
         }
     }
+    reporting?.let { ReportSheet(it, onDismiss = { reporting = null }) }
+    if (blocking) BlockDialog(post.author, onDismiss = { blocking = false })
     if (confirmDelete) androidx.compose.material3.AlertDialog(
         onDismissRequest = { confirmDelete = false },
         containerColor = P.bgElevated,
@@ -644,7 +656,11 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
     var comments by remember { mutableStateOf<List<Feed.Comment>?>(null) }
     var text by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<ReportTarget?>(null) }
+    var blocking by remember { mutableStateOf<Friends.Person?>(null) }
     LaunchedEffect(post.id) { comments = Feed.comments(post) }
+    reporting?.let { ReportSheet(it, onDismiss = { reporting = null }) }
+    blocking?.let { BlockDialog(it, onDismiss = { blocking = null }) }
     AppBottomSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.75f).imePadding()) {
             Text(
@@ -652,7 +668,8 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                 style = AppType.bodyStrong, color = P.textPrimary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
             )
             Box(Modifier.fillMaxWidth().height(1.dp).background(P.borderSubtle))
-            val list = comments
+            // Blocked people's comments stay hidden.
+            val list = comments?.filter { !Friends.isBlocked(it.uid) }
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)) {
                 when {
                     list == null -> item { Text(tr("Loading…"), style = AppType.body, color = P.textSecondary, modifier = Modifier.padding(8.dp)) }
@@ -668,7 +685,7 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                         var menu by remember { mutableStateOf(false) }
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 8.dp).pointerInput(c.id) {
-                                detectTapGestures(onLongPress = { if (c.uid == Feed.me() || post.mine) menu = true })
+                                detectTapGestures(onLongPress = { menu = true })
                             },
                             verticalAlignment = Alignment.Top
                         ) {
@@ -683,13 +700,23 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                             }
                             Box {
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                                    DropdownMenuItem(
+                                    if (c.uid == Feed.me() || post.mine) DropdownMenuItem(
                                         text = { Text(tr("Delete comment"), style = AppType.body, color = P.dangerText) },
                                         onClick = {
                                             menu = false
                                             scope.launch { if (Feed.deleteComment(post, c)) comments = comments?.filter { it.id != c.id } }
                                         }
                                     )
+                                    if (c.uid != Feed.me()) {
+                                        DropdownMenuItem(text = { Text(tr("Report comment"), style = AppType.body) }, onClick = {
+                                            menu = false
+                                            reporting = ReportTarget(who, Feed.pathOf(post), c.id, c.text)
+                                        })
+                                        DropdownMenuItem(text = { Text(tr("Block {0}", who.title()), style = AppType.body, color = P.dangerText) }, onClick = {
+                                            menu = false
+                                            blocking = who
+                                        })
+                                    }
                                 }
                             }
                         }

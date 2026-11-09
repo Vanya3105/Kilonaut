@@ -226,8 +226,12 @@ object CloudSync {
     }
     private val kinds = listOf(workouts, weighIns, state)
 
+    /** Set while an account is being deleted: no sync may put its data back. */
+    @Volatile var paused = false
+
     /** True when the sync went through. */
     private fun runOnce(context: Context): Boolean {
+        if (paused) return false
         val uid = signedInUid() ?: return false
         // A workout in progress changes with every set; it syncs once it's saved.
         if (LocalStorage.loadActiveSession(context) != null) {

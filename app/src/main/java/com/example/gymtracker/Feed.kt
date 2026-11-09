@@ -238,6 +238,15 @@ object Feed {
         personPosts = null
     }
 
+    /** Drops [uid]'s posts from what's showing (after blocking them). */
+    fun forget(uid: String) {
+        posts = posts?.filter { it.author.uid != uid }
+        personPosts = personPosts?.filter { it.author.uid != uid }
+    }
+
+    /** Where a post lives, for reports. */
+    fun pathOf(post: Post) = "users/${post.author.uid}/posts/${post.id}"
+
     /** Changes one post wherever it's shown (the feed and a person's page). */
     private fun change(post: Post, update: (Post) -> Post) {
         fun List<Post>.apply() = map { if (it.id == post.id && it.author.uid == post.author.uid) update(it) else it }

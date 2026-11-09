@@ -79,6 +79,24 @@ object Account {
         user = auth().currentUser?.toUser()
     }
 
+    /** Google's account picker on its own: the chosen account's ID token, or null (cancelled or failed). */
+    suspend fun googleIdToken(context: Context): String? {
+        val activity = context.findActivity() ?: return null
+        val clientId = webClientId(context) ?: return null
+        return try {
+            val request = GetCredentialRequest.Builder()
+                .addCredentialOption(GetSignInWithGoogleOption.Builder(clientId).build())
+                .build()
+            val credential = CredentialManager.create(activity).getCredential(activity, request).credential
+            if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                GoogleIdTokenCredential.createFrom(credential.data).idToken
+            } else null
+        } catch (e: Exception) {
+            Log.w(TAG, "Google confirm", e)
+            null
+        }
+    }
+
     /** Google's account picker, then Firebase. Null on success (or when cancelled), else what went wrong. */
     suspend fun signInWithGoogle(context: Context): String? {
         val activity = context.findActivity() ?: return tr("Couldn't open Google sign-in").also { Log.w(TAG, "No activity") }
