@@ -44,6 +44,15 @@ enum class AppLanguage(val tag: String, val label: String) {
             Runtime.getRuntime().exit(0)
         }
 
+        /**
+         * Before Android 13 the chosen language is applied when the activity starts; work that runs
+         * without it (notifications in the background) calls this first so its text matches.
+         */
+        fun applyInBackground(context: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
+            prefs(context).getString(KEY_TAG, null)?.let { Locale.setDefault(Locale.forLanguageTag(it)) }
+        }
+
         /** For attachBaseContext: before Android 13, gives the activity the chosen language. */
         fun wrap(base: Context): Context {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return base

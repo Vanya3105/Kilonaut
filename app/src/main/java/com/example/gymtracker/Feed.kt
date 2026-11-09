@@ -106,6 +106,9 @@ object Feed {
         private set
     var loading by mutableStateOf(false)
         private set
+    /** The last refresh failed (offline, or the server didn't answer). */
+    var failed by mutableStateOf(false)
+        private set
     /** People by uid seen in the feed (you and your friends), to name likers and commenters. */
     var people by mutableStateOf<Map<String, Friends.Person>>(emptyMap())
         private set
@@ -178,6 +181,7 @@ object Feed {
     suspend fun refresh(context: Context): Boolean = withContext(Dispatchers.IO) {
         val uid = me() ?: return@withContext false
         withContext(Dispatchers.Main) { loading = true }
+        var ok = false
         try {
             val circle = Friends.refresh() ?: return@withContext false
             val handle = Friends.myHandle ?: Friends.loadMe(context)
@@ -193,11 +197,12 @@ object Feed {
                 posts = list
                 people = authors.associateBy { it.uid }
             }
+            ok = true
             true
         } catch (_: Exception) {
             false
         } finally {
-            withContext(Dispatchers.Main) { loading = false }
+            withContext(Dispatchers.Main) { loading = false; failed = !ok }
         }
     }
 

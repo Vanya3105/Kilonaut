@@ -17,7 +17,9 @@ object AppShortcuts {
     const val START_NEXT = "com.vanyaevtushenko.gymtracker.shortcut.START_NEXT"
     const val EMPTY_WORKOUT = "com.vanyaevtushenko.gymtracker.shortcut.EMPTY_WORKOUT"
     const val LOG_WEIGHT = "com.vanyaevtushenko.gymtracker.shortcut.LOG_WEIGHT"
-    private val ALL = setOf(START_NEXT, EMPTY_WORKOUT, LOG_WEIGHT)
+    /** From a friends notification: the Feed tab. Not an icon shortcut. */
+    const val OPEN_FEED = "com.vanyaevtushenko.gymtracker.shortcut.OPEN_FEED"
+    private val ALL = setOf(START_NEXT, EMPTY_WORKOUT, LOG_WEIGHT, OPEN_FEED)
 
     /** The shortcut the app was opened with, until the app has acted on it. */
     var pending by mutableStateOf<String?>(null)

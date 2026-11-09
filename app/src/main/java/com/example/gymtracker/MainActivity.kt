@@ -624,6 +624,12 @@ fun GymTrackerApp(
                 selectedTab = AppTab.PROGRESS
                 logWeightRequest++
             }
+            AppShortcuts.OPEN_FEED -> {
+                // Over a running workout too: it stays running, the bar brings it back.
+                workoutExpanded = false
+                selectedTab = AppTab.FEED
+                Feed.refresh(context); Friends.refresh()
+            }
         }
     }
 

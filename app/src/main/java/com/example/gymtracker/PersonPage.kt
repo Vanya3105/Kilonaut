@@ -70,7 +70,7 @@ import java.util.Calendar
  * Training (last workout, best sets). Someone you're not friends with yet sees a locked page.
  */
 
-private enum class Relation { ME, FRIEND, WANTS_YOU, REQUESTED, NONE }
+private enum class Relation { ME, FRIEND, WANTS_YOU, REQUESTED, BLOCKED, NONE }
 
 @Composable
 fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
@@ -80,6 +80,7 @@ fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
     val circle = Friends.circle
     val relation = when {
         person.uid == Feed.me() || person.uid == "demo-me" -> Relation.ME
+        Friends.isBlocked(person.uid) -> Relation.BLOCKED
         Feed.demo || circle?.friends?.any { it.uid == person.uid } == true -> Relation.FRIEND
         circle?.requests?.any { it.uid == person.uid } == true -> Relation.WANTS_YOU
         circle?.sent?.any { it.uid == person.uid } == true -> Relation.REQUESTED
@@ -462,12 +463,16 @@ private fun Locked(person: Friends.Person, relation: Relation) {
             Icon(Icons.Rounded.Lock, null, tint = P.textSecondary, modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.height(14.dp))
-        Text(tr("Follow each other to see their training"), style = AppType.title, color = P.textPrimary, textAlign = TextAlign.Center)
+        Text(
+            if (relation == Relation.BLOCKED) tr("You blocked {0}", person.title()) else tr("Follow each other to see their training"),
+            style = AppType.title, color = P.textPrimary, textAlign = TextAlign.Center
+        )
         Spacer(Modifier.height(6.dp))
         Text(
             when (relation) {
                 Relation.WANTS_YOU -> tr("{0} wants to be friends. Accept to see each other's workouts, streaks and posts.", person.title())
                 Relation.REQUESTED -> tr("You asked. When {0} follows you back, you'll see each other's workouts, streaks and posts.", person.title())
+                Relation.BLOCKED -> tr("They can't follow you or see your training, and their comments are hidden from you.")
                 else -> tr("Friends see each other's workouts, streaks and posts.")
             },
             style = AppType.body, color = P.textSecondary, textAlign = TextAlign.Center
@@ -475,6 +480,7 @@ private fun Locked(person: Friends.Person, relation: Relation) {
         Spacer(Modifier.height(18.dp))
         when (relation) {
             Relation.REQUESTED -> Pill(tr("Requested"))
+            Relation.BLOCKED -> SecondaryButton(tr("Unblock"), { scope.launch { Friends.unblock(person.uid) } }, Modifier.fillMaxWidth())
             else -> PrimaryButton(
                 if (relation == Relation.WANTS_YOU) tr("Accept") else tr("Follow"),
                 { scope.launch { if (!Friends.follow(person.uid)) AppSnackbar.show(tr("Couldn't do that. Check your connection.")) } },

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FitnessCenter
@@ -131,6 +132,9 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
                 PrimaryButton(tr("Pick a username"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
             CommunityRules.agreed == false -> CommunityRulesGate(Modifier.statusBarsPadding().padding(top = 70.dp))
+            posts == null && Feed.failed && !Feed.loading -> FeedEmpty(Icons.Rounded.CloudOff, tr("Couldn't load the feed"), tr("Check your connection and try again.")) {
+                PrimaryButton(tr("Try again"), { scope.launch { Feed.refresh(context) } }, Modifier.fillMaxWidth())
+            }
             posts == null -> FeedLoading()
             posts.isEmpty() -> {
                 val last = history.maxByOrNull { it.id }

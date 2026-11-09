@@ -92,7 +92,7 @@ object WorkoutReminders {
     )
 
     /** Opens the app, for other notifications (friends' likes and comments). */
-    internal fun openAppIntent(context: Context, request: Int) = openApp(context, null, request)
+    internal fun openAppIntent(context: Context, request: Int, action: String? = null) = openApp(context, action, request)
 
     /** "Morning weigh-in", with Log, unless today's weigh-in is already in. */
     internal fun fireWeighIn(context: Context) {

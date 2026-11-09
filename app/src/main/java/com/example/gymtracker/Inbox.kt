@@ -68,6 +68,7 @@ object Inbox {
 
     /** One look: notifications for what's new, then the notes go. */
     suspend fun check(context: Context) = withContext(Dispatchers.IO) {
+        AppLanguage.applyInBackground(context)
         val me = try { FirebaseAuth.getInstance().currentUser?.uid } catch (_: Exception) { null } ?: return@withContext
         val notes = runCatching {
             Tasks.await(db().collection("users").document(me).collection("inbox").limit(50).get(Source.SERVER), 20, TimeUnit.SECONDS).documents
@@ -79,9 +80,12 @@ object Inbox {
         val names = HashMap<String, String>()
         fun name(uid: String) = names.getOrPut(uid) { Friends.personNow(uid).title().ifBlank { tr("Someone") } }
         val canShow = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        // One notification per thing: liking, unliking and liking again leaves two notes.
+        val shown = HashSet<String>()
         for (n in notes) {
             val from = n.getString("from").orEmpty()
-            if (canShow && from.isNotBlank() && !Friends.isBlocked(from)) {
+            val key = listOf(n.getString("type"), from, n.getString("post"), n.getString("comment")).joinToString("|")
+            if (canShow && from.isNotBlank() && !Friends.isBlocked(from) && shown.add(key)) {
                 val text = n.getString("text").orEmpty()
                 val (title, body) = when (n.getString("type")) {
                     "follow" -> if (from in iFollow) tr("{0} accepted your friend request", name(from)) to tr("You can see each other's training now.")
@@ -110,7 +114,7 @@ object Inbox {
             .setSmallIcon(R.drawable.ic_stat_workout)
             .setContentTitle(title)
             .apply { if (body.isNotBlank()) setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body)) }
-            .setContentIntent(WorkoutReminders.openAppIntent(context, 7400 + (id and 0xff)))
+            .setContentIntent(WorkoutReminders.openAppIntent(context, 7400 + (id and 0xff), AppShortcuts.OPEN_FEED))
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .build()
