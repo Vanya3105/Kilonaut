@@ -62,7 +62,7 @@ private val AVATAR_HUES = listOf(
 private fun hueFor(uid: String) = AVATAR_HUES[Math.floorMod(uid.hashCode(), AVATAR_HUES.size)]
 
 @Composable
-private fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false) {
+private fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false, image: androidx.compose.ui.graphics.ImageBitmap? = ProfilePhoto.decode(p.photo)) {
     val P = LocalPalette.current
     val hue = hueFor(p.uid)
     Box(
@@ -70,7 +70,10 @@ private fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false) {
             .then(if (ring) Modifier.border(2.dp, hue, CircleShape) else Modifier),
         contentAlignment = Alignment.Center
     ) {
-        Text(
+        if (image != null) androidx.compose.foundation.Image(
+            image, p.title(), Modifier.fillMaxSize().then(if (ring) Modifier.padding(2.dp).clip(CircleShape) else Modifier),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+        ) else Text(
             (p.name.ifBlank { p.handle }).take(1).uppercase(),
             style = if (size >= 64.dp) AppType.display else AppType.bodyStrong,
             color = hue
@@ -84,8 +87,9 @@ private fun Friends.Person.title() = name.ifBlank { "@$handle" }
 @Composable
 fun FriendsCard(onOpen: () -> Unit) {
     val P = LocalPalette.current
+    val context = LocalContext.current
     val signedIn = Account.user != null
-    LaunchedEffect(signedIn) { if (signedIn) { Friends.loadMe(); Friends.refresh() } }
+    LaunchedEffect(signedIn) { if (signedIn) { Friends.loadMe(context); Friends.refresh() } }
     val circle = Friends.circle
     AppCard(Modifier.fillMaxWidth(), onClick = onOpen, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -143,7 +147,7 @@ fun FriendsSection() {
     }
     var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(user.uid) {
-        Friends.loadMe()
+        Friends.loadMe(context)
         Friends.refresh()
         loaded = true
     }
@@ -171,7 +175,7 @@ fun FriendsSection() {
         // You: face, name, username, counts, and the invite.
         AppCard(Modifier.fillMaxWidth(), color = P.accentSoft) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                PersonAvatar(me, 56.dp, ring = true)
+                EditablePhoto { PersonAvatar(me, 56.dp, ring = true, image = ProfilePhoto.mine) }
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(me.title(), style = AppType.title, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)

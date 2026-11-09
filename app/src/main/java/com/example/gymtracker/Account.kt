@@ -59,7 +59,7 @@ object Account {
             val now = it.currentUser?.toUser()
             // A new sign-in brings the account's data in (and sends this phone's) right away.
             if (now != null && now.uid != user?.uid) CloudSync.request(app, now = true)
-            if (now == null) { CloudSync.signedOut(); Friends.signedOut() }
+            if (now == null) { CloudSync.signedOut(); Friends.signedOut(); ProfilePhoto.signedOut(app) }
             user = now
         }
         user = auth().currentUser?.toUser()

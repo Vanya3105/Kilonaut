@@ -44,6 +44,12 @@ await t('alice removes carol follow', writeBatch(A).delete(doc(A, 'users/alice/f
 await t('carol deletes alice following bob', deleteDoc(doc(C, 'users/alice/following/bob')), false);
 await t('bob unfollows', writeBatch(B).delete(doc(B, 'users/bob/following/alice')).delete(doc(B, 'users/alice/followers/bob')).commit(), true);
 await t('after unfollow bob cannot read stats', getDoc(doc(B, 'users/alice/public/stats')), false);
+await t('alice adds a photo', setDoc(doc(A, 'profiles/alice'), { name: 'Alice', handle: 'alice', photo: 'x'.repeat(40000) }), true);
+await t('photo only (no username yet)', setDoc(doc(C, 'profiles/carol'), { photo: 'x'.repeat(1000) }), true);
+await t('huge photo', setDoc(doc(A, 'profiles/alice'), { name: 'Alice', handle: 'alice', photo: 'x'.repeat(200000) }), false);
+await t('photo not text', setDoc(doc(A, 'profiles/alice'), { name: 'Alice', handle: 'alice', photo: 5 }), false);
+await t('bob changes alice photo', setDoc(doc(B, 'profiles/alice'), { photo: 'y' }), false);
+await t('bob sees alice photo', getDoc(doc(B, 'profiles/alice')), true);
 await t('bob deletes alice profile', deleteDoc(doc(B, 'profiles/alice')), false);
 await t('alice deletes own profile', deleteDoc(doc(A, 'profiles/alice')), true);
 await t('alice deletes own stats', deleteDoc(doc(A, 'users/alice/public/stats')), true);

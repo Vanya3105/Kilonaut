@@ -110,7 +110,8 @@ internal fun cleanHandle(raw: String): String = raw.trim().removePrefix("@").low
 internal fun isValidHandle(handle: String): Boolean = Regex("^[a-z0-9_.]{3,20}$").matches(handle)
 
 object Friends {
-    data class Person(val uid: String, val name: String, val handle: String)
+    /** [photo]: their profile picture as stored (base64 JPEG), or null. */
+    data class Person(val uid: String, val name: String, val handle: String, val photo: String? = null)
 
     /** Friends (follow each other), requests (follow you, you don't follow back) and sent (you follow, not back yet). */
     data class Circle(
@@ -135,11 +136,13 @@ object Friends {
         myHandle = null; circle = null; requestCount = 0
     }
 
-    /** Your username, or null when none is picked yet. */
-    suspend fun loadMe(): String? = withContext(Dispatchers.IO) {
+    /** Your username, or null when none is picked yet; also brings your photo in line with the account's. */
+    suspend fun loadMe(context: Context): String? = withContext(Dispatchers.IO) {
         val uid = me() ?: return@withContext null
-        val handle = db().collection("profiles").document(uid).get(Source.SERVER).waitFor().getString("handle")
+        val profile = try { db().collection("profiles").document(uid).get(Source.SERVER).waitFor() } catch (_: Exception) { return@withContext myHandle }
+        val handle = profile.getString("handle")
         withContext(Dispatchers.Main) { myHandle = handle }
+        ProfilePhoto.reconcile(context, profile.getString("photo"))
         handle
     }
 
@@ -155,7 +158,8 @@ object Friends {
                 val taken = t.get(db.collection("handles").document(handle))
                 if (taken.exists() && taken.getString("uid") != uid) throw IllegalStateException("taken")
                 t.set(db.collection("handles").document(handle), mapOf("uid" to uid))
-                t.set(db.collection("profiles").document(uid), mapOf("handle" to handle, "name" to name))
+                // Merged, so a photo set before the username stays.
+                t.set(db.collection("profiles").document(uid), mapOf("handle" to handle, "name" to name), com.google.firebase.firestore.SetOptions.merge())
                 if (old != null && old != handle) t.delete(db.collection("handles").document(old))
                 null
             }.waitFor()
@@ -180,7 +184,7 @@ object Friends {
 
     private fun profile(uid: String): Person {
         val p = db().collection("profiles").document(uid).get(Source.SERVER).waitFor()
-        return Person(uid, p.getString("name").orEmpty(), p.getString("handle").orEmpty())
+        return Person(uid, p.getString("name").orEmpty(), p.getString("handle").orEmpty(), p.getString("photo"))
     }
 
     /** Reads who follows whom and sorts it into friends, requests and sent. */

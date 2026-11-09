@@ -425,7 +425,7 @@ fun ProfileHeader(onOpen: () -> Unit) {
     val sync = CloudSync.status
     AppCard(Modifier.fillMaxWidth(), onClick = onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(user, 56.dp)
+            EditablePhoto { Avatar(user, 56.dp) }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -488,9 +488,12 @@ fun ProfileStats(history: List<CompletedWorkout>, weeklyGoal: Int) {
 fun Avatar(user: Account.User?, size: androidx.compose.ui.unit.Dp) {
     val P = LocalPalette.current
     val context = LocalContext.current
-    val photo by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, user?.photoUrl) {
+    remember { ProfilePhoto.load(context) }
+    val google by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, user?.photoUrl) {
         value = user?.photoUrl?.let { AvatarCache.load(context, it) }
     }
+    // A picture you chose comes first, then the Google one.
+    val photo = ProfilePhoto.mine ?: google
     Box(Modifier.size(size).clip(androidx.compose.foundation.shape.CircleShape).background(P.accentSoft), contentAlignment = Alignment.Center) {
         val image = photo
         when {
