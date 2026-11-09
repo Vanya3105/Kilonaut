@@ -1,5 +1,5 @@
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc, writeBatch, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, writeBatch, collection, getDocs, serverTimestamp, getCountFromServer, query, orderBy, limit } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 const env = await initializeTestEnvironment({ projectId: 'demo-kilonaut', firestore: { rules: readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8089 } });
 const db = (uid) => (uid ? env.authenticatedContext(uid) : env.unauthenticatedContext()).firestore();
@@ -54,5 +54,41 @@ await t('bob deletes alice profile', deleteDoc(doc(B, 'profiles/alice')), false)
 await t('alice deletes own profile', deleteDoc(doc(A, 'profiles/alice')), true);
 await t('alice deletes own stats', deleteDoc(doc(A, 'users/alice/public/stats')), true);
 await t('follow self', setDoc(doc(A, 'users/alice/following/alice'), { uid: 'alice' }), false);
+// --- Feed ---
+const D = db('dave'), E = db('erin');
+await follow(D, 'dave', 'erin'); await follow(E, 'erin', 'dave');      // dave and erin are friends
+await t('dave posts', setDoc(doc(D, 'users/dave/posts/p1'), { text: 'Leg day', workout: '{}', createdAt: serverTimestamp() }), true);
+await t('post with a photo', setDoc(doc(D, 'users/dave/posts/p2'), { photo: 'x'.repeat(300000), createdAt: serverTimestamp() }), true);
+await t('photo too big', setDoc(doc(D, 'users/dave/posts/p3'), { photo: 'x'.repeat(500000), createdAt: serverTimestamp() }), false);
+await t('empty post', setDoc(doc(D, 'users/dave/posts/p4'), { createdAt: serverTimestamp() }), false);
+await t('backdated post', setDoc(doc(D, 'users/dave/posts/p5'), { text: 'x', createdAt: new Date(2020, 1, 1) }), false);
+await t('extra field', setDoc(doc(D, 'users/dave/posts/p6'), { text: 'x', likes: 999, createdAt: serverTimestamp() }), false);
+await t('erin posts as dave', setDoc(doc(E, 'users/dave/posts/p7'), { text: 'x', createdAt: serverTimestamp() }), false);
+await t('dave edits post', setDoc(doc(D, 'users/dave/posts/p1'), { text: 'edited', createdAt: serverTimestamp() }), false);
+await t('friend reads feed', getDocs(query(collection(E, 'users/dave/posts'), orderBy('createdAt', 'desc'), limit(15))), true);
+await t('stranger reads feed', getDocs(collection(C, 'users/dave/posts')), false);
+await t('stranger reads a post', getDoc(doc(C, 'users/dave/posts/p1')), false);
+await t('friend likes', setDoc(doc(E, 'users/dave/posts/p1/likes/erin'), { at: serverTimestamp() }), true);
+await t('like as someone else', setDoc(doc(E, 'users/dave/posts/p1/likes/carol'), { at: serverTimestamp() }), false);
+await t('stranger likes', setDoc(doc(C, 'users/dave/posts/p1/likes/carol'), { at: serverTimestamp() }), false);
+await t('like a missing post', setDoc(doc(E, 'users/dave/posts/nope/likes/erin'), { at: serverTimestamp() }), false);
+await t('author likes own', setDoc(doc(D, 'users/dave/posts/p1/likes/dave'), { at: serverTimestamp() }), true);
+await t('friend reads likes', getDocs(collection(E, 'users/dave/posts/p1/likes')), true);
+await t('stranger reads likes', getDocs(collection(C, 'users/dave/posts/p1/likes')), false);
+await t('friend comments', setDoc(doc(E, 'users/dave/posts/p1/comments/c1'), { uid: 'erin', text: 'Strong!', at: serverTimestamp() }), true);
+await t('comment as someone else', setDoc(doc(E, 'users/dave/posts/p1/comments/c2'), { uid: 'dave', text: 'x', at: serverTimestamp() }), false);
+await t('empty comment', setDoc(doc(E, 'users/dave/posts/p1/comments/c3'), { uid: 'erin', text: '', at: serverTimestamp() }), false);
+await t('long comment', setDoc(doc(E, 'users/dave/posts/p1/comments/c4'), { uid: 'erin', text: 'x'.repeat(501), at: serverTimestamp() }), false);
+await t('stranger comments', setDoc(doc(C, 'users/dave/posts/p1/comments/c5'), { uid: 'carol', text: 'hi', at: serverTimestamp() }), false);
+await t('comment count', getCountFromServer(collection(E, 'users/dave/posts/p1/comments')), true);
+await t('stranger counts comments', getCountFromServer(collection(C, 'users/dave/posts/p1/comments')), false);
+await t('author deletes friend comment', setDoc(doc(E, 'users/dave/posts/p1/comments/c6'), { uid: 'erin', text: 'bye', at: serverTimestamp() }).then(() => deleteDoc(doc(D, 'users/dave/posts/p1/comments/c6'))), true);
+await t('friend deletes own comment', deleteDoc(doc(E, 'users/dave/posts/p1/comments/c1')), true);
+await t('friend deletes author like', deleteDoc(doc(E, 'users/dave/posts/p1/likes/dave')), false);
+await t('author clears a like', deleteDoc(doc(D, 'users/dave/posts/p1/likes/erin')), true);
+await t('friend deletes post', deleteDoc(doc(E, 'users/dave/posts/p1')), false);
+await t('author deletes post', deleteDoc(doc(D, 'users/dave/posts/p1')), true);
+await t('after unfollow, no reading', writeBatch(E).delete(doc(E, 'users/erin/following/dave')).delete(doc(E, 'users/dave/followers/erin')).commit()
+  .then(() => getDoc(doc(E, 'users/dave/posts/p2'))), false);
 console.log(`${n - bad}/${n} rule checks passed`);
 await env.cleanup();

@@ -8,6 +8,9 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function me() { return request.auth.uid; }
     function follows(a, b) { return exists(/databases/$(database)/documents/users/$(a)/following/$(b)); }
+    // You, or a friend of [uid] (you follow each other).
+    function canSee(uid) { return me() == uid || (follows(uid, me()) && follows(me(), uid)); }
+    function postExists(uid, post) { return exists(/databases/$(database)/documents/users/$(uid)/posts/$(post)); }
 
     // Workouts, weigh-ins and the plan: only the owner.
     match /users/{uid}/{collection}/{doc} {
@@ -32,6 +35,38 @@ service cloud.firestore {
     match /users/{uid}/public/{doc} {
       allow write: if signedIn() && me() == uid && doc == 'stats';
       allow read: if signedIn() && (me() == uid || (follows(uid, me()) && follows(me(), uid)));
+    }
+
+    // Posts: yours to write and delete (no editing); you and your friends read them.
+    match /users/{uid}/posts/{post} {
+      allow read: if signedIn() && canSee(uid);
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['text', 'workout', 'photo', 'createdAt'])
+        && request.resource.data.keys().hasAny(['text', 'workout', 'photo'])
+        && request.resource.data.createdAt == request.time
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 1000))
+        && (!('workout' in request.resource.data) || (request.resource.data.workout is string && request.resource.data.workout.size() <= 20000))
+        && (!('photo' in request.resource.data) || (request.resource.data.photo is string && request.resource.data.photo.size() <= 450000));
+      allow delete: if signedIn() && me() == uid;
+
+      // A like is your own entry under the post; the author can clear them (deleting the post).
+      match /likes/{liker} {
+        allow read: if signedIn() && canSee(uid);
+        allow create: if signedIn() && liker == me() && canSee(uid) && postExists(uid, post)
+          && request.resource.data.keys().hasOnly(['at']);
+        allow delete: if signedIn() && (liker == me() || me() == uid);
+      }
+
+      // Comments: friends and the author write their own; the writer or the author can delete one.
+      match /comments/{comment} {
+        allow read: if signedIn() && canSee(uid);
+        allow create: if signedIn() && canSee(uid) && postExists(uid, post)
+          && request.resource.data.keys().hasOnly(['uid', 'text', 'at'])
+          && request.resource.data.uid == me()
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+          && request.resource.data.at == request.time;
+        allow delete: if signedIn() && (resource.data.uid == me() || me() == uid);
+      }
     }
 
     // Name, username and a small profile picture, so people can find and recognise each other.

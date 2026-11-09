@@ -214,6 +214,7 @@ enum class AppTab(val label: String, val icon: ImageVector, val idleIcon: ImageV
     TODAY(tr("Today"), AppIcons.TodayFilled, AppIcons.Today),
     HISTORY(tr("History"), AppIcons.HistoryFilled, AppIcons.History),
     PROGRESS(tr("Progress"), AppIcons.ProgressFilled, AppIcons.Progress),
+    FEED(tr("Feed"), AppIcons.FeedFilled, AppIcons.Feed),
     PROFILE(tr("Profile"), AppIcons.ProfileFilled, AppIcons.Profile)
 }
 
@@ -670,6 +671,7 @@ fun GymTrackerApp(
                         onOpenExercise = { openExercise = it },
                         onMergeExercises = { from, into -> mergeExercises(from, into) }
                     )
+                    AppTab.FEED -> FeedScreen(history = history)
                     AppTab.PROFILE -> SettingsScreen(
                         settings = settings,
                         userProfile = userProfile,

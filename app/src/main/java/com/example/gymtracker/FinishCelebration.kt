@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DynamicFeed
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material3.Icon
@@ -60,6 +61,7 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
         computeWeekSummary(LocalStorage.loadHistory(context), 0, LocalStorage.loadUserProfile(context).splitProgram)
     }
     val badge = remember { Animatable(0f) }
+    var sharingToFeed by remember { mutableStateOf(false) }
     val content = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         launch { badge.animateTo(1f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessLow)) }
@@ -167,9 +169,18 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
                 Spacer(Modifier.height(28.dp))
                 PrimaryButton(tr("Done"), onDone, Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
+                // Friends first (when there's an account), then the image for anywhere else.
+                if (Account.user != null) {
+                    SecondaryButton(tr("Share to feed"), { sharingToFeed = true }, Modifier.fillMaxWidth(), icon = Icons.Rounded.DynamicFeed)
+                    Spacer(Modifier.height(10.dp))
+                }
                 SecondaryButton(tr("Share"), onShare, Modifier.fillMaxWidth(), icon = Icons.Rounded.IosShare)
                 Spacer(Modifier.height(24.dp))
             }
+        }
+        if (sharingToFeed) {
+            val all = remember { LocalStorage.loadHistory(context) }
+            ShareWorkoutComposer(all.firstOrNull { it.id == data.whenMillis }, all, onClose = { sharingToFeed = false })
         }
         // Confetti is for milestones only: after every workout it made the app feel like a game.
         if (isMilestone(data.workoutNumber)) ConfettiBurst(Modifier.fillMaxSize(), pieces = 90, cannons = true)

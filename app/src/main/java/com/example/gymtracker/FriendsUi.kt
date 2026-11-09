@@ -59,10 +59,10 @@ private val AVATAR_HUES = listOf(
     Color(0xFFE8590C), Color(0xFF1C7ED6), Color(0xFF2F9E44), Color(0xFF7048E8), Color(0xFFD6336C), Color(0xFF0C8599)
 )
 
-private fun hueFor(uid: String) = AVATAR_HUES[Math.floorMod(uid.hashCode(), AVATAR_HUES.size)]
+internal fun hueFor(uid: String) = AVATAR_HUES[Math.floorMod(uid.hashCode(), AVATAR_HUES.size)]
 
 @Composable
-private fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false, image: androidx.compose.ui.graphics.ImageBitmap? = ProfilePhoto.decode(p.photo)) {
+internal fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false, image: androidx.compose.ui.graphics.ImageBitmap? = ProfilePhoto.decode(p.photo)) {
     val P = LocalPalette.current
     val hue = hueFor(p.uid)
     Box(
@@ -81,7 +81,7 @@ private fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false, ima
     }
 }
 
-private fun Friends.Person.title() = name.ifBlank { "@$handle" }
+internal fun Friends.Person.title() = name.ifBlank { "@$handle" }
 
 /** Profile's way in: friends' faces, how many, and a badge for requests. */
 @Composable

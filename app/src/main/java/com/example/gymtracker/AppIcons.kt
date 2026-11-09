@@ -51,6 +51,13 @@ private const val HEAD = "M12,4.5 a3.5,3.5 0 1 1 0,7 a3.5,3.5 0 1 1 0,-7 z"
 private const val SHOULDERS = "M5,20 c0,-3.9 3.1,-6 7,-6 s7,2.1 7,6"
 private const val BODY = "M5,20 c0,-3.9 3.1,-6 7,-6 s7,2.1 7,6 z"
 
+// Two people, the one in front whole and the one behind showing a head and a shoulder.
+private const val FRONT_HEAD = "M9,5.5 a3,3 0 1 1 0,6 a3,3 0 1 1 0,-6 z"
+private const val FRONT_SHOULDERS = "M3,20 c0,-3.4 2.7,-5.6 6,-5.6 s6,2.2 6,5.6"
+private const val FRONT_BODY = "M3,20 c0,-3.4 2.7,-5.6 6,-5.6 s6,2.2 6,5.6 z"
+private const val BACK_HEAD = "M16.5,5 a2.6,2.6 0 1 1 0,5.2 a2.6,2.6 0 1 1 0,-5.2 z"
+private const val BACK_SHOULDER = "M16.2,13.6 c3,0 4.8,2.1 4.8,5.2"
+
 object AppIcons {
     val Today = icon("Today", listOf(PLATES, BAR))
     val TodayFilled = icon("TodayFilled", listOf(PLATES, BAR), fills = listOf(PLATES))
@@ -60,6 +67,9 @@ object AppIcons {
 
     val Progress = icon("Progress", listOf(CHART_LINE, CHART_ARROW, CHART_BASE))
     val ProgressFilled = icon("ProgressFilled", listOf(CHART_LINE, CHART_ARROW, CHART_BASE), fills = listOf(CHART_AREA), fillAlpha = 0.35f)
+
+    val Feed = icon("Feed", listOf(FRONT_HEAD, FRONT_SHOULDERS, BACK_HEAD, BACK_SHOULDER))
+    val FeedFilled = icon("FeedFilled", listOf(FRONT_HEAD, FRONT_SHOULDERS, BACK_HEAD, BACK_SHOULDER), fills = listOf(FRONT_HEAD, FRONT_BODY))
 
     val Profile = icon("Profile", listOf(HEAD, SHOULDERS))
     val ProfileFilled = icon("ProfileFilled", listOf(HEAD, SHOULDERS), fills = listOf(HEAD, BODY))
