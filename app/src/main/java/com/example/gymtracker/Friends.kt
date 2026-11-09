@@ -220,8 +220,13 @@ object Friends {
         db.batch()
             .set(db.collection("users").document(uid).collection("following").document(other), mapOf("uid" to other, "at" to at))
             .set(db.collection("users").document(other).collection("followers").document(uid), mapOf("uid" to uid, "at" to at))
+            // "Wants to be friends", or "accepted" when they already follow you.
+            .set(Inbox.newNote(other), Inbox.note("follow", uid, other))
             .commit()
     }
+
+    /** A person's name and username, for notifications. */
+    internal fun personNow(uid: String): Person = runCatching { profile(uid) }.getOrElse { Person(uid, "", "") }
 
     /** Blocks [other]: ends every follow between you, and the rules keep them from following you again. */
     suspend fun block(other: String): Boolean = blockNow(other).also { ok ->

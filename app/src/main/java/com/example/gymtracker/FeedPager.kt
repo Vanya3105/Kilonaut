@@ -49,6 +49,8 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -121,16 +123,16 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
     Box(Modifier.fillMaxSize().background(if (showingPosts) Scrim else P.bgPrimary)) {
         when {
             Feed.demo && !posts.isNullOrEmpty() -> FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
-            user == null -> FeedEmpty(Icons.Rounded.Group, tr("Your friends' training"), tr("Sign in and add friends to see their workouts and photos here, and share yours.")) {
+            user == null -> FeedEmpty(Icons.Rounded.Group, tr("Your friends' training"), tr("Sign in and add friends to see their workouts here, and share yours.")) {
                 PrimaryButton(tr("Sign in"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
-            handle == null -> FeedEmpty(Icons.Rounded.PersonAdd, tr("Set up Friends"), tr("Pick a username so friends can find you. Then their workouts and photos show up here.")) {
+            handle == null -> FeedEmpty(Icons.Rounded.PersonAdd, tr("Set up Friends"), tr("Pick a username so friends can find you. Then their workouts show up here.")) {
                 PrimaryButton(tr("Pick a username"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
             posts == null -> FeedLoading()
             posts.isEmpty() -> {
                 val last = history.maxByOrNull { it.id }
-                FeedEmpty(Icons.Rounded.FitnessCenter, tr("No posts yet"), tr("When your friends post a workout or a photo, it shows up here. Be the first.")) {
+                FeedEmpty(Icons.Rounded.FitnessCenter, tr("No posts yet"), tr("When your friends share a workout, it shows up here. Be the first.")) {
                     if (last != null) PrimaryButton(tr("Share your last workout"), { composing = ComposeStart(last) }, Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     SecondaryButton(tr("Find friends"), { friendsOpen = true }, Modifier.fillMaxWidth(), icon = Icons.Rounded.PersonAdd)
@@ -658,6 +660,8 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
     var sending by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf<ReportTarget?>(null) }
     var blocking by remember { mutableStateOf<Friends.Person?>(null) }
+    var replyingTo by remember { mutableStateOf<Feed.Comment?>(null) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(post.id) { comments = Feed.comments(post) }
     reporting?.let { ReportSheet(it, onDismiss = { reporting = null }) }
     blocking?.let { BlockDialog(it, onDismiss = { blocking = null }) }
@@ -680,16 +684,17 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                             Text(tr("No comments yet. Say something nice."), style = AppType.body, color = P.textSecondary)
                         }
                     }
-                    else -> items(list, key = { it.id }) { c ->
+                    else -> items(threaded(list), key = { it.id }) { c ->
                         val who = people[c.uid] ?: Friends.Person(c.uid, "", tr("someone"))
+                        val isReply = c.replyTo != null && list.any { it.id == c.replyTo }
                         var menu by remember { mutableStateOf(false) }
                         Row(
-                            Modifier.fillMaxWidth().padding(vertical = 8.dp).pointerInput(c.id) {
+                            Modifier.fillMaxWidth().padding(start = if (isReply) 48.dp else 0.dp, top = 8.dp, bottom = 4.dp).pointerInput(c.id) {
                                 detectTapGestures(onLongPress = { menu = true })
                             },
                             verticalAlignment = Alignment.Top
                         ) {
-                            PersonAvatar(who, 36.dp)
+                            PersonAvatar(who, if (isReply) 28.dp else 36.dp)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -697,6 +702,17 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                                     Text("  " + postAge(c.at), style = AppType.caption, color = P.textTertiary)
                                 }
                                 Text(c.text, style = AppType.body, color = P.textPrimary)
+                                Text(
+                                    tr("Reply"), style = AppType.label, color = P.textTertiary,
+                                    modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(8.dp))
+                                        .pressable {
+                                            // Replies answer the comment at the top of the thread, naming who they answer.
+                                            replyingTo = c
+                                            if (isReply && c.uid != Feed.me()) text = "@" + (who.handle.ifBlank { who.title() }) + " "
+                                            runCatching { focus.requestFocus() }
+                                        }
+                                        .padding(vertical = 4.dp, horizontal = 2.dp)
+                                )
                             }
                             Box {
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
@@ -723,17 +739,26 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                     }
                 }
             }
+            replyingTo?.let { r ->
+                val name = (people[r.uid] ?: Friends.Person(r.uid, "", tr("someone"))).title()
+                Row(Modifier.fillMaxWidth().background(P.bgControl).padding(start = 18.dp, end = 6.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Replying to {0}", name), style = AppType.caption, color = P.textSecondary, modifier = Modifier.weight(1f))
+                    Box(Modifier.size(32.dp).clip(CircleShape).pressable { replyingTo = null; text = "" }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Close, tr("Cancel"), tint = P.textSecondary, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
             Row(Modifier.fillMaxWidth().background(P.bgElevated).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 PersonAvatar(Friends.Person(Feed.me().orEmpty(), Account.user?.name.orEmpty(), Friends.myHandle.orEmpty()), 34.dp, image = ProfilePhoto.mine)
                 Spacer(Modifier.width(10.dp))
                 Row(Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(P.bgControl).padding(horizontal = 16.dp, vertical = 11.dp)) {
                     Box(Modifier.weight(1f)) {
-                        if (text.isEmpty()) Text(tr("Add a comment…"), style = AppType.body, color = P.textTertiary)
+                        if (text.isEmpty()) Text(if (replyingTo != null) tr("Add a reply…") else tr("Add a comment…"), style = AppType.body, color = P.textTertiary)
                         BasicTextField(
                             value = text, onValueChange = { text = it.take(500) },
                             textStyle = AppType.body.copy(color = P.textPrimary), cursorBrush = SolidColor(P.accentPrimary),
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                            maxLines = 4, modifier = Modifier.fillMaxWidth()
+                            maxLines = 4, modifier = Modifier.fillMaxWidth().focusRequester(focus)
                         )
                     }
                 }
@@ -743,7 +768,7 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                     Modifier.size(42.dp).clip(CircleShape).background(if (canSend) P.accentPrimary else P.bgControl).pressable(enabled = canSend) {
                         sending = true
                         scope.launch {
-                            if (Feed.comment(post, text)) { text = ""; comments = Feed.comments(post) } else AppSnackbar.show(tr("Couldn't send it. Check your connection."))
+                            if (Feed.comment(post, text, replyingTo, thread = replyingTo?.let { r -> r.replyTo?.takeIf { id -> comments.orEmpty().any { it.id == id } } ?: r.id })) { text = ""; replyingTo = null; comments = Feed.comments(post) } else AppSnackbar.show(tr("Couldn't send it. Check your connection."))
                             sending = false
                         }
                     },
@@ -752,4 +777,12 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
             }
         }
     }
+}
+
+/** Comments in threads: each top-level comment (oldest first) followed by its replies (oldest first). */
+internal fun threaded(list: List<Feed.Comment>): List<Feed.Comment> {
+    val ids = list.map { it.id }.toSet()
+    val roots = list.filter { it.replyTo == null || it.replyTo !in ids }.sortedBy { it.at }
+    val replies = list.filter { it.replyTo != null && it.replyTo in ids }.groupBy { it.replyTo }
+    return roots.flatMap { r -> listOf(r) + replies[r.id].orEmpty().sortedBy { it.at } }
 }

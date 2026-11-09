@@ -35,6 +35,28 @@ service cloud.firestore {
       allow delete: if signedIn() && (me() == uid || me() == other);
     }
 
+    // Notes for notifications: written with the like, comment or follow they describe (which must
+    // exist once the write is done), read and cleared by their owner.
+    match /users/{uid}/inbox/{note} {
+      allow read, delete: if signedIn() && me() == uid;
+      allow create: if signedIn() && uid != me() && !blockedBy(uid, me())
+        && request.resource.data.keys().hasOnly(['type', 'from', 'owner', 'post', 'comment', 'text', 'parent', 'at'])
+        && request.resource.data.from == me()
+        && request.resource.data.at == request.time
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 200))
+        && (
+          (request.resource.data.type == 'follow' && request.resource.data.owner == uid
+            && existsAfter(/databases/$(database)/documents/users/$(uid)/followers/$(me())))
+          || (request.resource.data.type == 'like' && request.resource.data.owner == uid
+            && existsAfter(/databases/$(database)/documents/users/$(uid)/posts/$(request.resource.data.post)/likes/$(me())))
+          || (request.resource.data.type == 'comment' && request.resource.data.owner == uid
+            && getAfter(/databases/$(database)/documents/users/$(uid)/posts/$(request.resource.data.post)/comments/$(request.resource.data.comment)).data.uid == me())
+          || (request.resource.data.type == 'reply'
+            && getAfter(/databases/$(database)/documents/users/$(request.resource.data.owner)/posts/$(request.resource.data.post)/comments/$(request.resource.data.comment)).data.uid == me()
+            && get(/databases/$(database)/documents/users/$(request.resource.data.owner)/posts/$(request.resource.data.post)/comments/$(request.resource.data.parent)).data.uid == uid)
+        );
+    }
+
     // Who you blocked: yours alone.
     match /users/{uid}/blocked/{other} {
       allow read, delete: if signedIn() && me() == uid;
@@ -59,16 +81,15 @@ service cloud.firestore {
       allow read: if signedIn() && (me() == uid || (follows(uid, me()) && follows(me(), uid)));
     }
 
-    // Posts: yours to write and delete (no editing); you and your friends read them.
+    // Posts: a workout you logged, with a few words; yours to write and delete (no editing, no
+    // photos); you and your friends read them.
     match /users/{uid}/posts/{post} {
       allow read: if signedIn() && canSee(uid);
       allow create: if signedIn() && me() == uid
-        && request.resource.data.keys().hasOnly(['text', 'workout', 'photo', 'createdAt'])
-        && request.resource.data.keys().hasAny(['text', 'workout', 'photo'])
+        && request.resource.data.keys().hasOnly(['text', 'workout', 'createdAt'])
+        && request.resource.data.workout is string && request.resource.data.workout.size() <= 20000
         && request.resource.data.createdAt == request.time
-        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 1000))
-        && (!('workout' in request.resource.data) || (request.resource.data.workout is string && request.resource.data.workout.size() <= 20000))
-        && (!('photo' in request.resource.data) || (request.resource.data.photo is string && request.resource.data.photo.size() <= 450000));
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 300));
       allow delete: if signedIn() && me() == uid;
 
       // A like is your own entry under the post; the author can clear them (deleting the post).
@@ -83,7 +104,8 @@ service cloud.firestore {
       match /comments/{comment} {
         allow read: if signedIn() && canSee(uid);
         allow create: if signedIn() && canSee(uid) && postExists(uid, post)
-          && request.resource.data.keys().hasOnly(['uid', 'text', 'at'])
+          && request.resource.data.keys().hasOnly(['uid', 'text', 'at', 'replyTo'])
+          && (!('replyTo' in request.resource.data) || (request.resource.data.replyTo is string && request.resource.data.replyTo.size() <= 64))
           && request.resource.data.uid == me()
           && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
           && request.resource.data.at == request.time;

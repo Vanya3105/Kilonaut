@@ -51,4 +51,12 @@ class FeedTest {
         assertEquals("now", postAge(now - 20_000, now))
         assertEquals("5m", postAge(now - 5 * 60_000, now))
     }
+
+    @Test
+    fun repliesFollowTheirComment() {
+        val c = { id: String, at: Long, to: String? -> Feed.Comment(id, "u", id, at, to) }
+        val list = listOf(c("a", 1, null), c("b", 2, null), c("a1", 3, "a"), c("b1", 4, "b"), c("a2", 5, "a"), c("orphan", 6, "gone"))
+        // Each comment, then its replies; a reply whose comment was deleted stands alone, in time order.
+        assertEquals(listOf("a", "a1", "a2", "b", "b1", "orphan"), threaded(list).map { it.id })
+    }
 }

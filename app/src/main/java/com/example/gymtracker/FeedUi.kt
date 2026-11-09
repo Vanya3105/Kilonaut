@@ -190,7 +190,8 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
     var photo by remember { mutableStateOf<String?>(null) }
-    var workout by remember { mutableStateOf(start) }
+    // The newest workout unless one was handed in: posts are always workouts.
+    var workout by remember { mutableStateOf(start ?: history.maxByOrNull { it.id }) }
     var picking by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var loadingPhoto by remember { mutableStateOf(false) }
@@ -204,7 +205,7 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
         }
     }
     val choosePhoto = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-    val canPost = !busy && (text.isNotBlank() || photo != null || workout != null)
+    val canPost = !busy && workout != null
     // Leaving with something written or attached asks first: one Back press shouldn't lose a post.
     var confirmDiscard by remember { mutableStateOf(false) }
     val leave = { if (text.isNotBlank() || photo != null || (workout != null && workout != start)) confirmDiscard = true else onClose() }
@@ -242,45 +243,32 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
                 Column(Modifier.weight(1f)) {
                     Text(me.title(), style = AppType.label, color = P.textSecondary)
                     Box(Modifier.padding(top = 4.dp)) {
-                        if (text.isEmpty()) Text(tr("How did it go?"), style = AppType.title, color = P.textTertiary)
+                        if (text.isEmpty()) Text(tr("How did it go? (optional)"), style = AppType.title, color = P.textTertiary)
                         BasicTextField(
-                            value = text, onValueChange = { text = it.take(1000) },
+                            value = text, onValueChange = { text = it.take(300) },
                             textStyle = AppType.title.copy(color = P.textPrimary), cursorBrush = SolidColor(P.accentPrimary),
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                             modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
                         )
                     }
-                    if (text.length > 800) Text("${text.length}/1000", style = AppType.caption, color = if (text.length >= 1000) P.dangerText else P.textTertiary)
+                    if (text.length > 240) Text("${text.length}/300", style = AppType.caption, color = if (text.length >= 300) P.dangerText else P.textTertiary)
                 }
             }
             Spacer(Modifier.height(18.dp))
 
-            // What's attached, or two big ways to attach something.
-            if (photo == null && workout == null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AttachTile(
-                        Icons.Rounded.Image, if (loadingPhoto) tr("Loading…") else tr("Add a photo"), tr("From your gallery"),
-                        Modifier.weight(1f), enabled = !loadingPhoto, onClick = choosePhoto
-                    )
-                    AttachTile(
-                        Icons.Rounded.FitnessCenter, tr("Share a workout"),
-                        if (history.isEmpty()) tr("No workouts yet") else tr("One of your recent ones"),
-                        Modifier.weight(1f), enabled = history.isNotEmpty()
-                    ) { picking = true }
-                }
+            // The workout: every post is one you logged (and nothing else, so there's nothing to moderate but words).
+            if (workout == null) {
+                AttachTile(
+                    Icons.Rounded.FitnessCenter, tr("Pick a workout"),
+                    if (history.isEmpty()) tr("Finish a workout first, then share it here") else tr("One of your recent ones"),
+                    Modifier.fillMaxWidth(), enabled = history.isNotEmpty()
+                ) { picking = true }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (photo == null) AttachChip(Icons.Rounded.Image, tr("Add a photo"), choosePhoto)
-                    else AttachChip(Icons.Rounded.Image, tr("Change photo"), choosePhoto)
-                    if (history.isNotEmpty()) AttachChip(Icons.Rounded.FitnessCenter, if (workout == null) tr("Add a workout") else tr("Change workout")) { picking = true }
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (photo != null) RemovableTag(Icons.Rounded.Image, tr("Photo")) { photo = null }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     workout?.let { w -> RemovableTag(Icons.Rounded.FitnessCenter, shown(w.splitTitle)) { workout = null } }
+                    if (history.size > 1) AttachChip(Icons.Rounded.FitnessCenter, tr("Change workout")) { picking = true }
                 }
             }
-
             // The preview: the post as a small feed page.
             AnimatedVisibility(preview != null, enter = fadeIn() + scaleIn(initialScale = 0.92f), exit = fadeOut() + scaleOut(targetScale = 0.92f)) {
                 Column(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {

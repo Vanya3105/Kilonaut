@@ -58,13 +58,15 @@ await t('follow self', setDoc(doc(A, 'users/alice/following/alice'), { uid: 'ali
 const D = db('dave'), E = db('erin');
 await follow(D, 'dave', 'erin'); await follow(E, 'erin', 'dave');      // dave and erin are friends
 await t('dave posts', setDoc(doc(D, 'users/dave/posts/p1'), { text: 'Leg day', workout: '{}', createdAt: serverTimestamp() }), true);
-await t('post with a photo', setDoc(doc(D, 'users/dave/posts/p2'), { photo: 'x'.repeat(300000), createdAt: serverTimestamp() }), true);
-await t('photo too big', setDoc(doc(D, 'users/dave/posts/p3'), { photo: 'x'.repeat(500000), createdAt: serverTimestamp() }), false);
+await t('dave posts p2', setDoc(doc(D, 'users/dave/posts/p2'), { workout: '{}', createdAt: serverTimestamp() }), true);
+await t('post with a photo', setDoc(doc(D, 'users/dave/posts/p8'), { workout: '{}', photo: 'x', createdAt: serverTimestamp() }), false);
+await t('text-only post', setDoc(doc(D, 'users/dave/posts/p3'), { text: 'hi', createdAt: serverTimestamp() }), false);
+await t('long caption', setDoc(doc(D, 'users/dave/posts/p9'), { text: 'x'.repeat(301), workout: '{}', createdAt: serverTimestamp() }), false);
 await t('empty post', setDoc(doc(D, 'users/dave/posts/p4'), { createdAt: serverTimestamp() }), false);
-await t('backdated post', setDoc(doc(D, 'users/dave/posts/p5'), { text: 'x', createdAt: new Date(2020, 1, 1) }), false);
-await t('extra field', setDoc(doc(D, 'users/dave/posts/p6'), { text: 'x', likes: 999, createdAt: serverTimestamp() }), false);
-await t('erin posts as dave', setDoc(doc(E, 'users/dave/posts/p7'), { text: 'x', createdAt: serverTimestamp() }), false);
-await t('dave edits post', setDoc(doc(D, 'users/dave/posts/p1'), { text: 'edited', createdAt: serverTimestamp() }), false);
+await t('backdated post', setDoc(doc(D, 'users/dave/posts/p5'), { workout: '{}', createdAt: new Date(2020, 1, 1) }), false);
+await t('extra field', setDoc(doc(D, 'users/dave/posts/p6'), { workout: '{}', likes: 999, createdAt: serverTimestamp() }), false);
+await t('erin posts as dave', setDoc(doc(E, 'users/dave/posts/p7'), { workout: '{}', createdAt: serverTimestamp() }), false);
+await t('dave edits post', setDoc(doc(D, 'users/dave/posts/p1'), { workout: '{}', text: 'edited', createdAt: serverTimestamp() }), false);
 await t('friend reads feed', getDocs(query(collection(E, 'users/dave/posts'), orderBy('createdAt', 'desc'), limit(15))), true);
 await t('stranger reads feed', getDocs(collection(C, 'users/dave/posts')), false);
 await t('stranger reads a post', getDoc(doc(C, 'users/dave/posts/p1')), false);
@@ -104,5 +106,25 @@ await t('report as someone else', addDoc(collection(G, 'reports'), { by: 'frank'
 await t('report with extra field', addDoc(collection(G, 'reports'), { by: 'gina', uid: 'frank', reason: 'spam', at: serverTimestamp(), score: 9 }), false);
 await t('nobody reads reports', getDocs(collection(G, 'reports')), false);
 await t('anon reports', addDoc(collection(anon, 'reports'), { by: 'x', uid: 'frank', reason: 'spam', at: serverTimestamp() }), false);
+// --- Replies and inbox notes ---
+const H = db('hank'), I = db('ivy'), J = db('jo');
+await follow(H, 'hank', 'ivy'); await follow(I, 'ivy', 'hank');
+await setDoc(doc(H, 'users/hank/posts/hp'), { workout: '{}', createdAt: serverTimestamp() });
+await setDoc(doc(H, 'users/hank/posts/hp/comments/hc'), { uid: 'hank', text: 'mine', at: serverTimestamp() });
+const note = (from, extra) => ({ from, at: serverTimestamp(), ...extra });
+await t('like + note', writeBatch(I).set(doc(I, 'users/hank/posts/hp/likes/ivy'), { at: serverTimestamp() })
+  .set(doc(I, 'users/hank/inbox/n1'), note('ivy', { type: 'like', owner: 'hank', post: 'hp' })).commit(), true);
+await t('note for a like that does not exist', setDoc(doc(J, 'users/hank/inbox/n2'), note('jo', { type: 'like', owner: 'hank', post: 'hp' })), false);
+await t('reply + notes', writeBatch(I).set(doc(I, 'users/hank/posts/hp/comments/ic'), { uid: 'ivy', text: 'yo', replyTo: 'hc', at: serverTimestamp() })
+  .set(doc(I, 'users/hank/inbox/n3'), note('ivy', { type: 'reply', owner: 'hank', post: 'hp', comment: 'ic', parent: 'hc', text: 'yo' })).commit(), true);
+await t('reply note to someone not answered', writeBatch(I).set(doc(I, 'users/hank/posts/hp/comments/ic2'), { uid: 'ivy', text: 'yo', replyTo: 'hc', at: serverTimestamp() })
+  .set(doc(I, 'users/jo/inbox/n4'), note('ivy', { type: 'reply', owner: 'hank', post: 'hp', comment: 'ic2', parent: 'hc' })).commit(), false);
+await t('comment note as someone else', setDoc(doc(J, 'users/hank/inbox/n5'), note('ivy', { type: 'comment', owner: 'hank', post: 'hp', comment: 'ic' })), false);
+await t('follow + note', writeBatch(J).set(doc(J, 'users/jo/following/hank'), { uid: 'hank' }).set(doc(J, 'users/hank/followers/jo'), { uid: 'jo' })
+  .set(doc(J, 'users/hank/inbox/n6'), note('jo', { type: 'follow', owner: 'hank' })).commit(), true);
+await t('owner reads inbox', getDocs(collection(H, 'users/hank/inbox')), true);
+await t('others read inbox', getDocs(collection(I, 'users/hank/inbox')), false);
+await t('owner clears a note', deleteDoc(doc(H, 'users/hank/inbox/n1')), true);
+await t('note to yourself', setDoc(doc(H, 'users/hank/inbox/n7'), note('hank', { type: 'follow', owner: 'hank' })), false);
 console.log(`${n - bad}/${n} rule checks passed`);
 await env.cleanup();

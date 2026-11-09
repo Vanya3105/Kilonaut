@@ -91,6 +91,9 @@ object WorkoutReminders {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    /** Opens the app, for other notifications (friends' likes and comments). */
+    internal fun openAppIntent(context: Context, request: Int) = openApp(context, null, request)
+
     /** "Morning weigh-in", with Log, unless today's weigh-in is already in. */
     internal fun fireWeighIn(context: Context) {
         schedule(context)

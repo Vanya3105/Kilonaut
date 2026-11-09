@@ -58,8 +58,8 @@ object Account {
         auth().addAuthStateListener {
             val now = it.currentUser?.toUser()
             // A new sign-in brings the account's data in (and sends this phone's) right away.
-            if (now != null && now.uid != user?.uid) CloudSync.request(app, now = true)
-            if (now == null) { CloudSync.signedOut(); Friends.signedOut(); Feed.signedOut(); ProfilePhoto.signedOut(app) }
+            if (now != null && now.uid != user?.uid) { CloudSync.request(app, now = true); Inbox.start(app) }
+            if (now == null) { CloudSync.signedOut(); Friends.signedOut(); Feed.signedOut(); ProfilePhoto.signedOut(app); Inbox.stop(app) }
             user = now
         }
         user = auth().currentUser?.toUser()

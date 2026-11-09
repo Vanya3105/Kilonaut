@@ -381,6 +381,7 @@ fun GymTrackerApp(
                 reloadFromDisk.value()
                 Account.start(context)
                 CloudSync.request(context, now = true)
+                if (Account.user != null) Inbox.start(context)
                 pullFromHealth.value()
                 checkForgotten.value()
             } else if (event == Lifecycle.Event.ON_STOP) {

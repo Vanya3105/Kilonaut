@@ -85,7 +85,7 @@ object AccountDeletion {
             following.forEach { o -> doomed += mine.collection("following").document(o); doomed += db.collection("users").document(o).collection("followers").document(me) }
             followers.forEach { o -> doomed += mine.collection("followers").document(o); doomed += db.collection("users").document(o).collection("following").document(me) }
             // Training, stats, blocks.
-            listOf("workouts", "weighins", "state", "public", "blocked").forEach { doomed += all(mine.collection(it)) }
+            listOf("workouts", "weighins", "state", "public", "blocked", "inbox").forEach { doomed += all(mine.collection(it)) }
             // Username and profile.
             val handle = runCatching { db.collection("profiles").document(me).get(Source.SERVER).waitFor().getString("handle") }.getOrNull()
             if (handle != null) doomed += db.collection("handles").document(handle)

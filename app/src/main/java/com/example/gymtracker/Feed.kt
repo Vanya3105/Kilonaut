@@ -99,7 +99,8 @@ object Feed {
         fun likedByMe() = (if (demo) "demo-me" else me()) in likes
     }
 
-    data class Comment(val id: String, val uid: String, val text: String, val at: Long)
+    /** [replyTo]: the comment it answers, or null for a comment on the post. */
+    data class Comment(val id: String, val uid: String, val text: String, val at: Long, val replyTo: String? = null)
 
     var posts by mutableStateOf<List<Post>?>(null)
         private set
@@ -256,6 +257,8 @@ object Feed {
 
     /** Posts [text], [photo] (as stored) and/or [workout]. Null when done, else why not. */
     suspend fun publish(context: Context, text: String, photo: String?, workout: CompletedWorkout?): String? = withContext(Dispatchers.IO) {
+        // Posts are workouts you logged, with a few words; no photos (nothing to moderate them with).
+        if (workout == null) return@withContext tr("Pick one of your workouts to share.")
         if (demo) {
             // The sample feed: the post goes on top here only.
             val w = workout?.let { parseWorkoutPost(workoutPostJson(it, LocalStorage.loadHistory(context).filter { h -> h.id < it.id }).toString()) }
@@ -266,13 +269,11 @@ object Feed {
         val uid = me() ?: return@withContext tr("Sign in first.")
         if (Friends.myHandle == null && Friends.loadMe(context) == null) return@withContext tr("Pick a username in Friends first.")
         val data = HashMap<String, Any>()
-        text.trim().take(1000).takeIf { it.isNotEmpty() }?.let { data["text"] = it }
-        photo?.let { data["photo"] = it }
+        text.trim().take(300).takeIf { it.isNotEmpty() }?.let { data["text"] = it }
         workout?.let { w ->
             val before = LocalStorage.loadHistory(context).filter { it.id < w.id }
             data["workout"] = workoutPostJson(w, before).toString()
         }
-        if (data.isEmpty()) return@withContext tr("Add a photo, a workout or a few words.")
         data["createdAt"] = FieldValue.serverTimestamp()
         try {
             posts(uid).add(data).waitFor()
@@ -313,7 +314,11 @@ object Feed {
         val ok = withContext(Dispatchers.IO) {
             try {
                 val ref = posts(post.author.uid).document(post.id).collection("likes").document(uid)
-                (if (on) ref.set(mapOf("at" to FieldValue.serverTimestamp())) else ref.delete()).waitFor()
+                if (on) {
+                    val batch = db().batch().set(ref, mapOf("at" to FieldValue.serverTimestamp()))
+                    if (post.author.uid != uid) batch.set(Inbox.newNote(post.author.uid), Inbox.note("like", uid, post.author.uid, post.id))
+                    batch.commit().waitFor()
+                } else ref.delete().waitFor()
                 true
             } catch (_: Exception) {
                 false
@@ -327,16 +332,20 @@ object Feed {
         if (demo) return@withContext demoComments[post.id].orEmpty().toList()
         try {
             posts(post.author.uid).document(post.id).collection("comments").orderBy("at").get(Source.SERVER).waitFor().documents.map {
-                Comment(it.id, it.getString("uid").orEmpty(), it.getString("text").orEmpty(), it.getTimestamp("at")?.toDate()?.time ?: System.currentTimeMillis())
+                Comment(it.id, it.getString("uid").orEmpty(), it.getString("text").orEmpty(), it.getTimestamp("at")?.toDate()?.time ?: System.currentTimeMillis(), it.getString("replyTo"))
             }
         } catch (_: Exception) {
             null
         }
     }
 
-    suspend fun comment(post: Post, text: String): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Comments on [post], or with [replyTo] answers that comment; the reply joins the thread of
+     * [thread] (the top comment). Notes go to the post's author and to whoever is answered.
+     */
+    suspend fun comment(post: Post, text: String, replyTo: Comment? = null, thread: String? = replyTo?.id): Boolean = withContext(Dispatchers.IO) {
         if (demo) {
-            demoComments.getOrPut(post.id) { mutableListOf() } += Comment("c${System.nanoTime()}", "demo-me", text.trim(), System.currentTimeMillis())
+            demoComments.getOrPut(post.id) { mutableListOf() } += Comment("c${System.nanoTime()}", "demo-me", text.trim(), System.currentTimeMillis(), thread)
             withContext(Dispatchers.Main) { bump(post, +1) }
             return@withContext true
         }
@@ -344,8 +353,16 @@ object Feed {
         val clean = text.trim().take(500)
         if (clean.isEmpty()) return@withContext false
         try {
-            posts(post.author.uid).document(post.id).collection("comments")
-                .add(mapOf("uid" to uid, "text" to clean, "at" to FieldValue.serverTimestamp())).waitFor()
+            val ref = posts(post.author.uid).document(post.id).collection("comments").document()
+            val data = hashMapOf<String, Any>("uid" to uid, "text" to clean, "at" to FieldValue.serverTimestamp())
+            thread?.let { data["replyTo"] = it }
+            val batch = db().batch().set(ref, data)
+            val excerpt = clean.take(120)
+            val answered = replyTo?.uid?.takeIf { it != uid }
+            // The person answered hears "replied"; the post's author hears "commented" (unless they're the one answered, or it's you).
+            if (answered != null) batch.set(Inbox.newNote(answered), Inbox.note("reply", uid, post.author.uid, post.id, ref.id, excerpt, replyTo.id))
+            if (post.author.uid != uid && post.author.uid != answered) batch.set(Inbox.newNote(post.author.uid), Inbox.note("comment", uid, post.author.uid, post.id, ref.id, excerpt))
+            batch.commit().waitFor()
             withContext(Dispatchers.Main) { bump(post, +1) }
             true
         } catch (_: Exception) {
