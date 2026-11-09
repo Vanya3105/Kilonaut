@@ -170,7 +170,9 @@ fun WorkoutCelebration(data: ShareData, haptics: Haptics, onShare: () -> Unit, o
                 PrimaryButton(tr("Done"), onDone, Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
                 // Friends first (when there's an account), then the image for anywhere else.
-                if (Account.user != null) {
+                // Only with Friends set up (a username): sharing needs somewhere to go.
+                LaunchedEffect(Account.user?.uid) { if (Account.user != null && Friends.myHandle == null) runCatching { Friends.loadMe(context) } }
+                if (Account.user != null && Friends.myHandle != null) {
                     SecondaryButton(tr("Share to feed"), { sharingToFeed = true }, Modifier.fillMaxWidth(), icon = Icons.Rounded.DynamicFeed)
                     Spacer(Modifier.height(10.dp))
                 }
