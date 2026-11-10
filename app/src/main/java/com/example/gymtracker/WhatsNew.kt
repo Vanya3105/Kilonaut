@@ -23,6 +23,11 @@ import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.DynamicFeed
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,7 +50,7 @@ object WhatsNew {
 
     /** The highlights of [version], or none. Words through [tr] when shown, so they follow the language. */
     /** Versions with notes, newest first. */
-    private val VERSIONS = listOf("1.0.0-beta.2", "1.0.0-beta.1")
+    private val VERSIONS = listOf("1.0.0-beta.3", "1.0.0-beta.2", "1.0.0-beta.1")
 
     /**
      * [current]'s notes first, then those of versions newer than [since] that weren't seen (an update
@@ -57,6 +62,15 @@ object WhatsNew {
     }
 
     internal fun notesFor(version: String): List<Item> = when (version) {
+        "1.0.0-beta.3" -> listOf(
+            Item(Icons.Rounded.Group, tr("Friends"), tr("Pick a username, find friends by it and follow each other. Only friends see what you share.")),
+            Item(Icons.Rounded.DynamicFeed, tr("A feed to swipe through"), tr("Share a workout, a photo or a few words, and swipe up through your friends' posts. Double-tap to like.")),
+            Item(Icons.Rounded.Forum, tr("Comments that talk back"), tr("Reply to a comment, like it, mention someone with @, or answer with one tap of an emoji.")),
+            Item(Icons.Rounded.FitnessCenter, tr("Do a friend's workout"), tr("Open the workout on a friend's post and start it yourself, with weights from your own training.")),
+            Item(Icons.Rounded.NotificationsActive, tr("Activity"), tr("Likes, comments and friend requests in one place, grouped, with a dot on Feed when something's new. Choose which ones notify you.")),
+            Item(Icons.Rounded.AccountCircle, tr("Profiles"), tr("Your page and your friends': a photo, a short bio, weeks in a row, posts and best lifts. Share yours with a tap.")),
+            Item(Icons.Rounded.Shield, tr("Safe by design"), tr("Report or block anyone, community rules to agree to, and delete your account with everything in it from Profile → Account."))
+        )
         "1.0.0-beta.2" -> listOf(
             Item(Icons.Rounded.EmojiEvents, tr("A better finish"), tr("You celebrate with a small jump, and the screen shows your week and what's next. Timed workouts show the time you held.")),
             Item(Icons.Rounded.Timer, tr("Today follows your workout"), tr("While a workout runs, Today shows its clock, the rest left and the exercise you're on.")),
