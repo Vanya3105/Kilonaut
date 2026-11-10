@@ -59,4 +59,54 @@ class FeedTest {
         // Each comment, then its replies; a reply whose comment was deleted stands alone, in time order.
         assertEquals(listOf("a", "a1", "a2", "b", "b1", "orphan"), threaded(list).map { it.id })
     }
+
+    @Test
+    fun longThreadsFoldUntilOpened() {
+        val c = { id: String, at: Long, to: String? -> Feed.Comment(id, "u", id, at, to) }
+        val list = listOf(c("a", 1, null), c("a1", 2, "a"), c("a2", 3, "a"), c("a3", 4, "a"), c("b", 5, null), c("b1", 6, "b"), c("b2", 7, "b"))
+        fun show(lines: List<CommentLine>) = lines.map { if (it is CommentLine.One) it.comment.id + (if (it.reply) "^" else "") else "+" + (it as CommentLine.More).hidden }
+        // Three replies: the first, then "2 more"; two replies show as they are.
+        assertEquals(listOf("a", "a1^", "+2", "b", "b1^", "b2^"), show(commentLines(list, emptySet())))
+        assertEquals(listOf("a", "a1^", "a2^", "a3^", "b", "b1^", "b2^"), show(commentLines(list, setOf("a"))))
+    }
+
+    @Test
+    fun mentionsAreUsernamesNotEmails() {
+        val found = MENTION.findAll("@maya.lifts nice, mail me at dan@mail.com or @Dan_L").map { it.groupValues[1] }.toList()
+        assertEquals(listOf("maya.lifts", "Dan_L"), found)
+    }
+
+    @Test
+    fun sharedPostReadsWell() {
+        val w = parseWorkoutPost(workoutPostJson(workout(1_000_000L + 7 * day, "85"), listOf(workout(1_000_000L, "80"))).toString())!!
+        val post = Feed.Post("p", Friends.Person("u", "Maya Cohen", "maya"), 0L, "Finally", null, w, emptyList(), 0)
+        val text = postShareText(post, "https://example.com/get")
+        val lines = text.lines()
+        assertEquals("Maya Cohen trained Push on Kilonaut", lines[0])
+        assertEquals("“Finally”", lines[1])
+        assertTrue(lines.any { it.startsWith("• Bench Press") && it.endsWith("🏆") })
+        assertEquals("https://example.com/get", lines.last())
+        assertFalse("body weight stays private", text.contains("81.3"))
+    }
+
+    @Test
+    fun aFriendsWorkoutToDoYourself() {
+        val w = parseWorkoutPost(workoutPostJson(workout(1_000_000L, "80"), emptyList()).toString())!!
+        val mine = postAsWorkout(w, from = "Maya")
+        assertEquals("Push from Maya", mine.splitTitle)
+        assertEquals(listOf("Bench Press", "Plank"), mine.exercises.map { it.name })
+        // As many work sets, no numbers of theirs (yours come from your own history when it starts).
+        assertEquals(listOf(2, 1), mine.exercises.map { it.sets.size })
+        assertTrue(mine.exercises.flatMap { it.sets }.all { it.weight.isEmpty() && !it.isCompleted })
+        assertEquals(ExerciseType.DURATION, mine.exercises[1].type)
+        assertEquals("Push", postAsWorkout(w).splitTitle)
+    }
+
+    @Test
+    fun compactCounts() {
+        assertEquals("999", compactCount(999))
+        assertEquals("1K", compactCount(1000))
+        assertEquals("1.2K", compactCount(1234))
+        assertEquals("12K", compactCount(12_400))
+    }
 }

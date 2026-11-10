@@ -98,6 +98,30 @@ class FeedScreensTest {
     @Test fun midSwipe() = draw("4-swipe", 0, 0.35f)
     @Test fun caughtUp() = draw("5-end", 3)
 
+    /** The sample feed's first post with its comments open: threads, likes on comments, quick reactions. */
+    @Test
+    fun comments() {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        Feed.showDemo()
+        val list = Feed.posts!!
+        compose.setContent {
+            GymTheme(LightPalette) {
+                FeedPager(list, Feed.people, onFriends = {}, onNewPost = {}, openComments = true)
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.waitForIdle()
+        Thread.sleep(500)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        // The sheet is its own window: draw that window.
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        val bitmap = dialog.window!!.decorView.drawToBitmap()
+        File("build/screenshots/feed-7-comments.png").apply { parentFile?.mkdirs() }
+            .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        Feed.signedOut()
+    }
+
     @Test
     fun empty() {
         RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")

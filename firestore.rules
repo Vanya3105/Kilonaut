@@ -51,6 +51,9 @@ service cloud.firestore {
             && existsAfter(/databases/$(database)/documents/users/$(uid)/posts/$(request.resource.data.post)/likes/$(me())))
           || (request.resource.data.type == 'comment' && request.resource.data.owner == uid
             && getAfter(/databases/$(database)/documents/users/$(uid)/posts/$(request.resource.data.post)/comments/$(request.resource.data.comment)).data.uid == me())
+          || (request.resource.data.type == 'clike'
+            && existsAfter(/databases/$(database)/documents/users/$(request.resource.data.owner)/posts/$(request.resource.data.post)/comments/$(request.resource.data.comment)/likes/$(me()))
+            && get(/databases/$(database)/documents/users/$(request.resource.data.owner)/posts/$(request.resource.data.post)/comments/$(request.resource.data.comment)).data.uid == uid)
           || (request.resource.data.type == 'reply'
             && getAfter(/databases/$(database)/documents/users/$(request.resource.data.owner)/posts/$(request.resource.data.post)/comments/$(request.resource.data.comment)).data.uid == me()
             && get(/databases/$(database)/documents/users/$(request.resource.data.owner)/posts/$(request.resource.data.post)/comments/$(request.resource.data.parent)).data.uid == uid)
@@ -81,14 +84,18 @@ service cloud.firestore {
       allow read: if signedIn() && (me() == uid || (follows(uid, me()) && follows(me(), uid)));
     }
 
-    // Posts: a workout you logged, with a few words; yours to write and delete (no editing, no
-    // photos); you and your friends read them.
+    // Posts: a workout you logged, with a few words; yours to write and delete (only the words can
+    // change later; no photos); you and your friends read them.
     match /users/{uid}/posts/{post} {
       allow read: if signedIn() && canSee(uid);
       allow create: if signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['text', 'workout', 'createdAt'])
         && request.resource.data.workout is string && request.resource.data.workout.size() <= 20000
         && request.resource.data.createdAt == request.time
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 300));
+      allow update: if signedIn() && me() == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited'])
+        && request.resource.data.edited == true
         && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 300));
       allow delete: if signedIn() && me() == uid;
 
@@ -110,6 +117,16 @@ service cloud.firestore {
           && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
           && request.resource.data.at == request.time;
         allow delete: if signedIn() && (resource.data.uid == me() || me() == uid);
+
+        // Likes on a comment: your own entry; you, the post's author or the comment's writer clear them.
+        match /likes/{liker} {
+          allow read: if signedIn() && canSee(uid);
+          allow create: if signedIn() && liker == me() && canSee(uid)
+            && exists(/databases/$(database)/documents/users/$(uid)/posts/$(post)/comments/$(comment))
+            && request.resource.data.keys().hasOnly(['at']);
+          allow delete: if signedIn() && (liker == me() || me() == uid
+            || get(/databases/$(database)/documents/users/$(uid)/posts/$(post)/comments/$(comment)).data.uid == me());
+        }
       }
     }
 

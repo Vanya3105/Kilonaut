@@ -70,15 +70,22 @@ object AccountDeletion {
             for (friend in following intersect followers.toSet()) {
                 for (post in all(db.collection("users").document(friend).collection("posts"))) {
                     doomed += post.collection("likes").document(me)
-                    doomed += runCatching {
-                        post.collection("comments").whereEqualTo("uid", me).get(Source.SERVER).waitFor().documents.map { it.reference }
-                    }.getOrDefault(emptyList())
+                    // My comments there, and my likes on anyone's comments there.
+                    val comments = runCatching { post.collection("comments").get(Source.SERVER).waitFor().documents }.getOrDefault(emptyList())
+                    comments.forEach { c ->
+                        doomed += c.reference.collection("likes").document(me)
+                        // Others' likes on my comment go first, while the comment still says it's mine.
+                        if (c.getString("uid") == me) { doomed += all(c.reference.collection("likes")); doomed += c.reference }
+                    }
                 }
             }
             // My posts, with their likes and comments.
             for (post in all(mine.collection("posts"))) {
                 doomed += all(post.collection("likes"))
-                doomed += all(post.collection("comments"))
+                for (c in all(post.collection("comments"))) {
+                    doomed += all(c.collection("likes"))
+                    doomed += c
+                }
                 doomed += post
             }
             // Follows both ways, each with its mirror on the other side.

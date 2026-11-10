@@ -93,14 +93,22 @@ object Feed {
         val workout: WorkoutPost?,
         /** Who liked it (uids), and whether you did. */
         val likes: List<String>,
-        val comments: Int
+        val comments: Int,
+        /** The caption was changed after posting. */
+        val edited: Boolean = false
     ) {
         val mine: Boolean get() = author.uid == me()
         fun likedByMe() = (if (demo) "demo-me" else me()) in likes
     }
 
-    /** [replyTo]: the comment it answers, or null for a comment on the post. */
-    data class Comment(val id: String, val uid: String, val text: String, val at: Long, val replyTo: String? = null)
+    /** [replyTo]: the comment it answers, or null for a comment on the post; [likes]: who liked it (uids). */
+    data class Comment(val id: String, val uid: String, val text: String, val at: Long, val replyTo: String? = null, val likes: List<String> = emptyList()) {
+        fun likedByMe() = (if (demo) "demo-me" else me()) in likes
+    }
+
+    /** When the feed was last read, to read it again when you come back to it after a while. */
+    var refreshedAt = 0L
+        private set
 
     var posts by mutableStateOf<List<Post>?>(null)
         private set
@@ -155,9 +163,15 @@ object Feed {
             PostExercise("Plank", ExerciseType.DURATION, 2, SetEntry(1, "", "", isCompleted = true, seconds = "75"), false)
         ))
         demoComments.clear()
-        demoComments["d1"] = mutableListOf(Comment("c1", dan.uid, "Monster!", now - 3_000_000), Comment("c2", noa.uid, "Form looked clean", now - 1_000_000))
+        demoComments["d1"] = mutableListOf(
+            Comment("c1", dan.uid, "Monster!", now - 3_000_000, likes = listOf(maya.uid, noa.uid)),
+            Comment("c2", noa.uid, "Form looked clean", now - 1_000_000),
+            Comment("c3", maya.uid, "Thanks! Paused reps paid off", now - 2_800_000, replyTo = "c1", likes = listOf(dan.uid)),
+            Comment("c4", dan.uid, "@maya.lifts teach me", now - 2_600_000, replyTo = "c1"),
+            Comment("c5", noa.uid, "Same, what program?", now - 2_400_000, replyTo = "c1")
+        )
         posts = listOf(
-            Post("d1", maya, now - 2 * 3_600_000, "New bench best. Finally 85 for six", demoPhoto(), bench, listOf(dan.uid, noa.uid), 2),
+            Post("d1", maya, now - 2 * 3_600_000, "New bench best. Finally 85 for six", demoPhoto(), bench, listOf(dan.uid, noa.uid), 5),
             Post("d2", dan, now - 20 * 60_000, "", null, legs, listOf(maya.uid), 0),
             Post("d3", noa, now - 26 * 3_600_000, "Rest day. Walked 12k steps and slept 9 hours. Back at it tomorrow.", null, null, emptyList(), 0),
             Post("d4", maya, now - 3 * 24 * 3_600_000, "Sunday session done", demoPhoto(0xFF2E4057.toInt(), 0xFF0B1320.toInt()), null, emptyList(), 0)
@@ -197,6 +211,7 @@ object Feed {
                 posts = list
                 people = authors.associateBy { it.uid }
             }
+            refreshedAt = System.currentTimeMillis()
             ok = true
             true
         } catch (_: Exception) {
@@ -221,7 +236,8 @@ object Feed {
                 photo = d.getString("photo"),
                 workout = parseWorkoutPost(d.getString("workout")),
                 likes = runCatching { likesTask.waitFor().documents.map { it.id } }.getOrDefault(emptyList()),
-                comments = runCatching { countTask.waitFor().count.toInt() }.getOrDefault(0)
+                comments = runCatching { countTask.waitFor().count.toInt() }.getOrDefault(0),
+                edited = d.getBoolean("edited") == true
             )
         }
     }
@@ -308,7 +324,11 @@ object Feed {
             val ref = posts(post.author.uid).document(post.id)
             val batch = db().batch()
             ref.collection("likes").get(Source.SERVER).waitFor().documents.forEach { batch.delete(it.reference) }
-            ref.collection("comments").get(Source.SERVER).waitFor().documents.forEach { batch.delete(it.reference) }
+            val comments = ref.collection("comments").get(Source.SERVER).waitFor().documents
+            // Each comment's likes too (they'd outlive the comment otherwise).
+            val commentLikes = comments.map { it.reference.collection("likes").get(Source.SERVER) }
+            commentLikes.forEach { t -> runCatching { t.waitFor().documents.forEach { batch.delete(it.reference) } } }
+            comments.forEach { batch.delete(it.reference) }
             batch.delete(ref).commit().waitFor()
             withContext(Dispatchers.Main) {
                 posts = posts?.filter { it.id != post.id }
@@ -349,8 +369,14 @@ object Feed {
     suspend fun comments(post: Post): List<Comment>? = withContext(Dispatchers.IO) {
         if (demo) return@withContext demoComments[post.id].orEmpty().toList()
         try {
-            posts(post.author.uid).document(post.id).collection("comments").orderBy("at").get(Source.SERVER).waitFor().documents.map {
-                Comment(it.id, it.getString("uid").orEmpty(), it.getString("text").orEmpty(), it.getTimestamp("at")?.toDate()?.time ?: System.currentTimeMillis(), it.getString("replyTo"))
+            val docs = posts(post.author.uid).document(post.id).collection("comments").orderBy("at").get(Source.SERVER).waitFor().documents
+            // Every comment's likes at once.
+            val likes = docs.map { it.reference.collection("likes").get(Source.SERVER) }
+            docs.zip(likes).map { (it, likesTask) ->
+                Comment(
+                    it.id, it.getString("uid").orEmpty(), it.getString("text").orEmpty(), it.getTimestamp("at")?.toDate()?.time ?: System.currentTimeMillis(), it.getString("replyTo"),
+                    runCatching { likesTask.waitFor().documents.map { l -> l.id } }.getOrDefault(emptyList())
+                )
             }
         } catch (_: Exception) {
             null
@@ -389,9 +415,54 @@ object Feed {
     }
 
     suspend fun deleteComment(post: Post, c: Comment): Boolean = withContext(Dispatchers.IO) {
-        try {
-            posts(post.author.uid).document(post.id).collection("comments").document(c.id).delete().waitFor()
+        if (demo) {
+            demoComments[post.id]?.removeAll { it.id == c.id }
             withContext(Dispatchers.Main) { bump(post, -1) }
+            return@withContext true
+        }
+        try {
+            val ref = posts(post.author.uid).document(post.id).collection("comments").document(c.id)
+            val batch = db().batch()
+            runCatching { ref.collection("likes").get(Source.SERVER).waitFor().documents.forEach { batch.delete(it.reference) } }
+            batch.delete(ref).commit().waitFor()
+            withContext(Dispatchers.Main) { bump(post, -1) }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Likes or unlikes comment [c] on [post]; its writer hears about a like. */
+    suspend fun likeComment(post: Post, c: Comment, on: Boolean): Boolean = withContext(Dispatchers.IO) {
+        if (demo) {
+            demoComments[post.id]?.replaceAll { if (it.id == c.id) it.copy(likes = if (on) it.likes - "demo-me" + "demo-me" else it.likes - "demo-me") else it }
+            return@withContext true
+        }
+        val uid = me() ?: return@withContext false
+        try {
+            val ref = posts(post.author.uid).document(post.id).collection("comments").document(c.id).collection("likes").document(uid)
+            if (on) {
+                val batch = db().batch().set(ref, mapOf("at" to FieldValue.serverTimestamp()))
+                if (c.uid != uid) batch.set(Inbox.newNote(c.uid), Inbox.note("clike", uid, post.author.uid, post.id, c.id, c.text.take(120)))
+                batch.commit().waitFor()
+            } else ref.delete().waitFor()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Changes the words on your post (empty takes them off). */
+    suspend fun editCaption(post: Post, text: String): Boolean = withContext(Dispatchers.IO) {
+        val clean = text.trim().take(300)
+        if (demo) {
+            withContext(Dispatchers.Main) { change(post) { it.copy(text = clean, edited = true) } }
+            return@withContext true
+        }
+        try {
+            posts(post.author.uid).document(post.id)
+                .update(mapOf("text" to (if (clean.isEmpty()) FieldValue.delete() else clean), "edited" to true)).waitFor()
+            withContext(Dispatchers.Main) { change(post) { it.copy(text = clean, edited = true) } }
             true
         } catch (_: Exception) {
             false
@@ -444,4 +515,40 @@ object Feed {
             null
         }
     }
+}
+
+/** A post as words to send anywhere: who, the workout's numbers, its best lifts, and where to get the app. */
+internal fun postShareText(post: Feed.Post, link: String): String {
+    val who = post.author.name.ifBlank { "@" + post.author.handle }
+    val w = post.workout
+    val lines = ArrayList<String>()
+    if (w != null) {
+        lines += tr("{0} trained {1} on Kilonaut", who, shown(w.title))
+        lines += listOfNotNull(
+            formatDuration(w.seconds), formatVolume(w.kg).takeIf { w.kg > 0 }, tr("{0} sets", w.sets),
+            (if (w.bests == 1) tr("New best") else tr("{0} new bests", w.bests)).takeIf { w.bests > 0 }
+        ).joinToString(" · ")
+        w.exercises.take(5).forEach { e -> lines += "• " + shown(e.name) + (e.best?.let { " " + formatSet(it, e.type) } ?: "") + (if (e.isBest) " 🏆" else "") }
+    } else lines += tr("{0} on Kilonaut", who)
+    if (post.text.isNotBlank()) lines.add(1, "“" + post.text + "”")
+    lines += ""
+    lines += link
+    return lines.joinToString("\n")
+}
+
+/** A post's workout as one to do yourself: its exercises in order, as many work sets (the numbers are yours). */
+internal fun postAsWorkout(w: WorkoutPost, from: String? = null): CompletedWorkout = CompletedWorkout(
+    // A friend's day keeps their name on it, so it doesn't pass for a day of your own plan.
+    id = 0L, splitTitle = if (from.isNullOrBlank()) w.title else tr("{0} from {1}", shown(w.title), from), dateKey = "", displayDate = "", durationSeconds = 0L, bodyWeightKg = 0f, photoPath = null,
+    skippedExercises = emptyList(),
+    exercises = w.exercises.map { e ->
+        ExerciseEntry(e.name, ExerciseDatabase.find(e.name)?.muscle.orEmpty(), type = e.type, sets = List(e.sets.coerceAtLeast(1)) { i -> SetEntry(i + 1, "", "") })
+    }
+)
+
+/** 999, 1.2K, 12K: counts on the rail. */
+internal fun compactCount(n: Int): String = when {
+    n < 1000 -> "$n"
+    n < 10_000 -> String.format(java.util.Locale.US, "%.1fK", n / 1000f).replace(".0K", "K")
+    else -> "${n / 1000}K"
 }

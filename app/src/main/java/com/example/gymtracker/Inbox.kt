@@ -41,7 +41,7 @@ object Inbox {
 
     fun newNote(to: String): DocumentReference = db().collection("users").document(to).collection("inbox").document()
 
-    /** A note: [type] follow / like / comment / reply; [owner] the post's author; [parent] the comment answered. */
+    /** A note: [type] follow / like / clike (a comment's) / comment / reply; [owner] the post's author; [parent] the comment answered. */
     fun note(type: String, from: String, owner: String, post: String? = null, comment: String? = null, text: String? = null, parent: String? = null): Map<String, Any> =
         buildMap {
             put("type", type); put("from", from); put("owner", owner); put("at", FieldValue.serverTimestamp())
@@ -98,6 +98,7 @@ object Inbox {
                     "follow" -> if (from in iFollow) tr("{0} accepted your friend request", name(from)) to tr("You can see each other's training now.")
                     else tr("{0} wants to be friends", name(from)) to tr("Open Friends to accept.")
                     "like" -> tr("{0} liked your workout", name(from)) to ""
+                    "clike" -> tr("{0} liked your comment", name(from)) to text
                     "comment" -> tr("{0} commented", name(from)) to text
                     "reply" -> tr("{0} replied to you", name(from)) to text
                     else -> null to ""

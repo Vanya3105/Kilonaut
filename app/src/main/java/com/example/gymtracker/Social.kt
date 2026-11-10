@@ -62,7 +62,7 @@ object SocialPrefs {
     /** The switch a note's type belongs to. */
     fun kindOf(type: String?) = when (type) {
         "follow" -> REQUESTS
-        "like" -> LIKES
+        "like", "clike" -> LIKES
         else -> COMMENTS
     }
 }
@@ -116,6 +116,47 @@ object ActivityLog {
         android.os.Handler(android.os.Looper.getMainLooper()).post { unread = n }
     }
 
+    /** When the Activity page was last opened. */
+    fun seenAt(context: Context, uid: String) = prefs(context).getLong("$uid.seen", 0L)
+
+    /** One row: [item] (the newest) and who else did the same (likes on the same post or comment). */
+    data class Group(val item: Item, val others: List<String> = emptyList())
+
+    /** Likes on the same post (or the same comment) become one row, as Instagram shows them; newest first. */
+    internal fun grouped(items: List<Item>): List<Group> {
+        val out = ArrayList<Group>()
+        val index = HashMap<String, Int>()
+        for (it in items) {
+            val key = when (it.type) {
+                "like" -> "like|${it.owner}|${it.post}"
+                "clike" -> "clike|${it.owner}|${it.post}|${it.text}"
+                else -> null
+            }
+            val at = key?.let(index::get)
+            if (at != null) {
+                val g = out[at]
+                if (it.from != g.item.from && it.from !in g.others) out[at] = g.copy(others = g.others + it.from)
+            } else {
+                if (key != null) index[key] = out.size
+                out += Group(it)
+            }
+        }
+        return out
+    }
+
+    /** Today, This week, Earlier: the heading a row at [at] goes under. */
+    internal fun bucketOf(at: Long, now: Long = System.currentTimeMillis()): Int {
+        val startOfDay = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        return when {
+            at >= startOfDay -> 0
+            at >= startOfDay - 6 * 86_400_000L -> 1
+            else -> 2
+        }
+    }
+
     fun markSeen(context: Context, uid: String) {
         prefs(context).edit().putLong("$uid.seen", System.currentTimeMillis()).apply()
         unread = 0
@@ -124,12 +165,14 @@ object ActivityLog {
 
 /** The Activity page: find friends, requests to answer, then what happened. */
 @Composable
-fun ActivityPage(onClose: () -> Unit, onFriends: () -> Unit, onPerson: (Friends.Person) -> Unit, onPost: (owner: String, post: String) -> Unit) {
+fun ActivityPage(onClose: () -> Unit, onFriends: () -> Unit, onPerson: (Friends.Person) -> Unit, onPost: (owner: String, post: String, comments: Boolean) -> Unit) {
     val P = LocalPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uid = Feed.me() ?: return
     var items by remember { mutableStateOf(ActivityLog.items(context, uid)) }
+    // What came in since you last looked gets a dot (read before this visit marks it all seen).
+    val seenBefore = remember { ActivityLog.seenAt(context, uid) }
     var people by remember { mutableStateOf<Map<String, Friends.Person>>(emptyMap()) }
     LaunchedEffect(Unit) {
         // Anything waiting comes in now (without popping notifications), then names for everyone.
@@ -187,8 +230,8 @@ fun ActivityPage(onClose: () -> Unit, onFriends: () -> Unit, onPerson: (Friends.
                     }
                 }
             }
-            item { Header(tr("Activity")) }
             if (items.isEmpty()) item {
+                Header(tr("Activity"))
                 Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(64.dp).clip(CircleShape).background(P.bgControl), contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Notifications, null, tint = P.textTertiary, modifier = Modifier.size(30.dp))
@@ -198,11 +241,19 @@ fun ActivityPage(onClose: () -> Unit, onFriends: () -> Unit, onPerson: (Friends.
                     Text(tr("Likes, comments and friend requests show up here."), style = AppType.body, color = P.textSecondary, textAlign = TextAlign.Center)
                 }
             }
-            items(items, key = { it.type + it.from + it.at + it.post }) { it ->
-                val who = people[it.from] ?: Friends.Person(it.from, "", "")
-                ActivityRow(it, who, onClick = {
-                    if (it.type == "follow" || it.post.isBlank()) onPerson(who) else onPost(it.owner.ifBlank { uid }, it.post)
-                })
+            val groups = ActivityLog.grouped(items)
+            groups.forEachIndexed { i, g ->
+                val bucket = ActivityLog.bucketOf(g.item.at)
+                if (i == 0 || ActivityLog.bucketOf(groups[i - 1].item.at) != bucket) item(key = "h$bucket") {
+                    Header(listOf(tr("Today"), tr("This week"), tr("Earlier"))[bucket])
+                }
+                val it = g.item
+                item(key = it.type + it.from + it.at + it.post) {
+                    val who = people[it.from] ?: Friends.Person(it.from, "", "")
+                    ActivityRow(g, who, g.others.map { o -> people[o] ?: Friends.Person(o, "", "") }, isNew = it.at > seenBefore, onClick = {
+                        if (it.type == "follow" || it.post.isBlank()) onPerson(who) else onPost(it.owner.ifBlank { uid }, it.post, it.type != "like")
+                    })
+                }
             }
         }
     }
@@ -215,23 +266,38 @@ private fun Header(text: String) {
 }
 
 @Composable
-private fun ActivityRow(item: ActivityLog.Item, who: Friends.Person, onClick: () -> Unit) {
+private fun ActivityRow(group: ActivityLog.Group, who: Friends.Person, others: List<Friends.Person>, isNew: Boolean, onClick: () -> Unit) {
     val P = LocalPalette.current
-    val name = who.title().ifBlank { tr("Someone") }
+    val item = group.item
+    val first = who.title().ifBlank { tr("Someone") }
+    val name = when (others.size) {
+        0 -> first
+        1 -> tr("{0} and {1}", first, others[0].title().ifBlank { tr("someone") })
+        else -> tr("{0} and {1} others", first, others.size)
+    }
     val (badge, color) = when (item.type) {
-        "like" -> Icons.Rounded.Favorite to Color(0xFFFF4D5E)
+        "like", "clike" -> Icons.Rounded.Favorite to Color(0xFFFF4D5E)
         "follow" -> Icons.Rounded.PersonAdd to P.accentPrimary
         else -> Icons.Rounded.ChatBubble to Color(0xFF1C7ED6)
     }
     val what = when (item.type) {
         "like" -> tr("liked your workout")
+        "clike" -> tr("liked your comment: {0}", item.text)
         "comment" -> tr("commented: {0}", item.text)
         "reply" -> tr("replied: {0}", item.text)
         else -> if (item.accepted) tr("accepted your friend request") else tr("wants to be friends")
     }
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).pressable(onClick = onClick).padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box {
-            PersonAvatar(who, 46.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (isNew) P.accentSoft.copy(alpha = 0.45f) else Color.Transparent)
+            .pressable(onClick = onClick).padding(horizontal = 6.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(50.dp)) {
+            if (others.isNotEmpty()) {
+                // Two faces, overlapping, when several people did it.
+                Box(Modifier.align(Alignment.TopEnd)) { PersonAvatar(others[0], 34.dp) }
+                Box(Modifier.align(Alignment.BottomStart).border(2.dp, P.bgPrimary, CircleShape)) { PersonAvatar(who, 34.dp) }
+            } else Box(Modifier.align(Alignment.Center)) { PersonAvatar(who, 46.dp) }
             Box(
                 Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp).size(20.dp).clip(CircleShape).background(P.bgPrimary).padding(2.dp)
                     .clip(CircleShape).background(color),

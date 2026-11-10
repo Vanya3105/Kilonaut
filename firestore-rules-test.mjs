@@ -1,5 +1,5 @@
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc, writeBatch, collection, getDocs, addDoc, serverTimestamp, getCountFromServer, query, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteField, deleteDoc, writeBatch, collection, getDocs, addDoc, serverTimestamp, getCountFromServer, query, orderBy, limit } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 const env = await initializeTestEnvironment({ projectId: 'demo-kilonaut', firestore: { rules: readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8089 } });
 const db = (uid) => (uid ? env.authenticatedContext(uid) : env.unauthenticatedContext()).firestore();
@@ -128,5 +128,31 @@ await t('owner reads inbox', getDocs(collection(H, 'users/hank/inbox')), true);
 await t('others read inbox', getDocs(collection(I, 'users/hank/inbox')), false);
 await t('owner clears a note', deleteDoc(doc(H, 'users/hank/inbox/n1')), true);
 await t('note to yourself', setDoc(doc(H, 'users/hank/inbox/n7'), note('hank', { type: 'follow', owner: 'hank' })), false);
+// --- Comment likes and caption edits ---
+await t('friend likes a comment + note', writeBatch(I).set(doc(I, 'users/hank/posts/hp/comments/hc/likes/ivy'), { at: serverTimestamp() })
+  .set(doc(I, 'users/hank/inbox/n8'), note('ivy', { type: 'clike', owner: 'hank', post: 'hp', comment: 'hc', text: 'mine' })).commit(), true);
+await t('comment like as someone else', setDoc(doc(I, 'users/hank/posts/hp/comments/hc/likes/hank'), { at: serverTimestamp() }), false);
+await t('stranger likes a comment', setDoc(doc(J, 'users/hank/posts/hp/comments/hc/likes/jo'), { at: serverTimestamp() }), false);
+await t('like a missing comment', setDoc(doc(I, 'users/hank/posts/hp/comments/nope/likes/ivy'), { at: serverTimestamp() }), false);
+await t('comment like extra field', setDoc(doc(H, 'users/hank/posts/hp/comments/ic/likes/hank'), { at: serverTimestamp(), n: 1 }), false);
+await t('clike note without the like', setDoc(doc(I, 'users/hank/inbox/n9'), note('ivy', { type: 'clike', owner: 'hank', post: 'hp', comment: 'ic' })), false);
+await t('clike note to someone who did not write it', writeBatch(H).set(doc(H, 'users/hank/posts/hp/comments/ic/likes/hank'), { at: serverTimestamp() })
+  .set(doc(H, 'users/jo/inbox/n10'), note('hank', { type: 'clike', owner: 'hank', post: 'hp', comment: 'ic' })).commit(), false);
+await t('friend reads comment likes', getDocs(collection(H, 'users/hank/posts/hp/comments/hc/likes')), true);
+await t('stranger reads comment likes', getDocs(collection(J, 'users/hank/posts/hp/comments/hc/likes')), false);
+await setDoc(doc(H, 'users/hank/posts/hp/comments/ic/likes/hank'), { at: serverTimestamp() });
+await t('comment writer clears its likes with it', writeBatch(I).delete(doc(I, 'users/hank/posts/hp/comments/ic/likes/hank')).delete(doc(I, 'users/hank/posts/hp/comments/ic')).commit(), true);
+await t('someone else clears a comment like', deleteDoc(doc(J, 'users/hank/posts/hp/comments/hc/likes/ivy')), false);
+await t('liker unlikes a comment', deleteDoc(doc(I, 'users/hank/posts/hp/comments/hc/likes/ivy')), true);
+await t('author edits caption', updateDoc(doc(H, 'users/hank/posts/hp'), { text: 'Better words', edited: true }), true);
+await t('author removes caption', updateDoc(doc(H, 'users/hank/posts/hp'), { text: deleteField(), edited: true }), true);
+await setDoc(doc(H, 'users/hank/posts/hp3'), { workout: '{}', createdAt: serverTimestamp() });
+await t('edit without marking edited', updateDoc(doc(H, 'users/hank/posts/hp3'), { text: 'sneaky' }), false);
+await t('unmark edited', updateDoc(doc(H, 'users/hank/posts/hp'), { edited: false }), false);
+await t('edit the workout', updateDoc(doc(H, 'users/hank/posts/hp'), { workout: '{"kg":99999}', edited: true }), false);
+await t('edit the time', updateDoc(doc(H, 'users/hank/posts/hp'), { createdAt: serverTimestamp(), edited: true }), false);
+await t('caption too long', updateDoc(doc(H, 'users/hank/posts/hp'), { text: 'x'.repeat(301), edited: true }), false);
+await t('friend edits caption', updateDoc(doc(I, 'users/hank/posts/hp'), { text: 'mine now', edited: true }), false);
+await t('new post marked edited', setDoc(doc(H, 'users/hank/posts/hp2'), { workout: '{}', edited: true, createdAt: serverTimestamp() }), false);
 console.log(`${n - bad}/${n} rule checks passed`);
 await env.cleanup();

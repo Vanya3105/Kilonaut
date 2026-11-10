@@ -36,12 +36,15 @@ import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -66,7 +69,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -92,7 +101,7 @@ private val Scrim = Color.Black
 /** The feed tab. [active]: it's the tab showing (it stays composed when you switch away). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
+fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true, onTryWorkout: ((CompletedWorkout) -> Unit)? = null) {
     val P = LocalPalette.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -101,7 +110,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
     var composing by remember { mutableStateOf<ComposeStart?>(null) }
     var person by remember { mutableStateOf<Friends.Person?>(null) }
     var activityOpen by remember { mutableStateOf(false) }
-    var openPost by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var openPost by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }
 
     LaunchedEffect(user?.uid) {
         if (user != null) {
@@ -110,9 +119,17 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
             Feed.me()?.let { ActivityLog.refreshUnread(context, it) }
         }
     }
+    // Back on the tab after a while: read it again, as other apps do.
+    LaunchedEffect(active) {
+        if (active && user != null && Feed.refreshedAt > 0 && !Feed.loading && System.currentTimeMillis() - Feed.refreshedAt > 5 * 60_000) Feed.refresh(context)
+    }
     val posts = Feed.posts
     val handle = Friends.myHandle
     remember { CommunityRules.load(context) }
+    // "Do this workout" closes whatever is open over the feed, then starts it.
+    val tryWorkout: ((CompletedWorkout) -> Unit)? = onTryWorkout?.let { start ->
+        { w: CompletedWorkout -> openPost = null; person = null; activityOpen = false; start(w) }
+    }
     val showingPosts = (Feed.demo || (user != null && handle != null && CommunityRules.agreed == true)) && !posts.isNullOrEmpty()
     SideEffect { Feed.fullBleed = showingPosts }
     val debuggable = remember { (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
@@ -127,6 +144,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
         onDispose { if (before != null) controller.isAppearanceLightStatusBars = before }
     }
 
+    CompositionLocalProvider(LocalTryWorkout provides tryWorkout) {
     Box(Modifier.fillMaxSize().background(if (showingPosts) Scrim else P.bgPrimary)) {
         when {
             Feed.demo && !posts.isNullOrEmpty() -> FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
@@ -175,16 +193,20 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
         onClose = { activityOpen = false },
         onFriends = { friendsOpen = true },
         onPerson = { person = it },
-        onPost = { owner, id -> openPost = owner to id }
+        onPost = { owner, id, comments -> openPost = Triple(owner, id, comments) }
     )
-    openPost?.let { (owner, id) -> PostViewer(owner, id, onClose = { openPost = null }, onPerson = { person = it }) }
+    openPost?.let { (owner, id, comments) -> PostViewer(owner, id, onClose = { openPost = null }, onPerson = { person = it }, openComments = comments) }
     person?.let { PersonPage(it, onClose = { person = null }) }
 
     if (friendsOpen) FullPage(tr("Friends"), onClose = { friendsOpen = false; scope.launch { Feed.refresh(context) } }) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) { FriendsSection() }
     }
     composing?.let { start -> ShareWorkoutComposer(start.workout, history, onClose = { composing = null }) }
+    }
 }
+
+/** Starts a post's workout as your own (null where that can't be done, e.g. outside the feed). */
+internal val LocalTryWorkout = staticCompositionLocalOf<((CompletedWorkout) -> Unit)?> { null }
 
 /** "Feed" with Friends and New post, floating over the pages (white on photos, the theme's colours otherwise). */
 @Composable
@@ -240,9 +262,11 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
 @Composable
 internal fun FeedPager(
     posts: List<Feed.Post>, people: Map<String, Friends.Person>, onFriends: () -> Unit, onNewPost: () -> Unit,
-    pager: PagerState = rememberPagerState { posts.size + 1 }, endPage: Boolean = true, onOpenPerson: (Friends.Person) -> Unit = {}
+    pager: PagerState = rememberPagerState { posts.size + 1 }, endPage: Boolean = true, onOpenPerson: (Friends.Person) -> Unit = {},
+    openComments: Boolean = false
 ) {
-    var commentsFor by remember { mutableStateOf<Feed.Post?>(null) }
+    // A comment notification opens the post with its comments showing.
+    var commentsFor by remember { mutableStateOf(if (openComments) posts.firstOrNull() else null) }
     var workoutOf by remember { mutableStateOf<Feed.Post?>(null) }
     // Your new post goes on top: glide up to it.
     val top = posts.firstOrNull()
@@ -281,14 +305,24 @@ internal fun FeedPager(
 
     commentsFor?.let { p ->
         val live = Feed.posts?.firstOrNull { it.id == p.id && it.author.uid == p.author.uid } ?: p
-        CommentsSheet(live, people, onDismiss = { commentsFor = null })
+        CommentsSheet(live, people, onDismiss = { commentsFor = null }, onPerson = { commentsFor = null; onOpenPerson(it) })
     }
     workoutOf?.workout?.let { w ->
+        val tryIt = LocalTryWorkout.current
         AppBottomSheet(onDismiss = { workoutOf = null }) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 Text(workoutOf?.author?.title().orEmpty(), style = AppType.caption, color = LocalPalette.current.textSecondary, modifier = Modifier.padding(horizontal = 28.dp))
                 Spacer(Modifier.height(6.dp))
                 WorkoutBlock(w, full = true)
+                if (tryIt != null && w.exercises.isNotEmpty()) {
+                    // Hevy's "copy this workout": the same exercises and set counts, with your own numbers.
+                    Spacer(Modifier.height(14.dp))
+                    PrimaryButton(tr("Do this workout"), { val by = workoutOf?.author; workoutOf = null; tryIt(postAsWorkout(w, from = by?.takeIf { !it.isMeOrDemo() }?.let { it.name.substringBefore(' ').ifBlank { it.handle } })) }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), icon = Icons.Rounded.PlayArrow)
+                    Text(
+                        tr("Same exercises and sets, with weights from your own training."), style = AppType.caption, color = LocalPalette.current.textTertiary,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
     }
@@ -319,7 +353,10 @@ internal fun PostPage(
     val scope = rememberCoroutineScope()
     val bursts = remember { mutableStateListOf<Burst>() }
     var expanded by remember { mutableStateOf(false) }
+    var overflows by remember { mutableStateOf(false) }
+    val haptics = rememberFeedHaptics()
     val like = { on: Boolean ->
+        if (on) haptics.tick()
         scope.launch { if (!Feed.like(post, on)) AppSnackbar.show(tr("Couldn't do that. Check your connection.")) }
         Unit
     }
@@ -374,14 +411,20 @@ internal fun PostPage(
         ) {
             Row(Modifier.clip(RoundedCornerShape(8.dp)).pressable(onClick = onPerson), verticalAlignment = Alignment.CenterVertically) {
                 Text(post.author.title(), style = AppType.bodyStrong, color = White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                Text("  ·  " + postAge(post.createdAt), style = AppType.caption, color = White.copy(alpha = 0.75f))
+                Text("  ·  " + postAge(post.createdAt) + (if (post.edited) "  ·  " + tr("edited") else ""), style = AppType.caption, color = White.copy(alpha = 0.75f))
             }
             if (post.author.name.isNotBlank() && post.author.handle.isNotBlank()) Text("@${post.author.handle}", style = AppType.caption, color = White.copy(alpha = 0.75f))
             if (post.text.isNotBlank() && (photo != null || post.workout != null)) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     post.text, style = AppType.body, color = White,
-                    maxLines = if (expanded) 12 else 2, overflow = TextOverflow.Ellipsis
+                    maxLines = if (expanded) 12 else 2, overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow }
+                )
+                // Long words: "more" opens them (a tap anywhere does too), "less" folds them again.
+                if (overflows) Text(
+                    if (expanded) tr("less") else tr("more"), style = AppType.label, color = White.copy(alpha = 0.85f),
+                    modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(6.dp)).pressable { expanded = !expanded }.padding(vertical = 2.dp)
                 )
             }
             if (photo != null && post.workout != null) {
@@ -395,7 +438,7 @@ internal fun PostPage(
                     when {
                         likers.isEmpty() -> if (post.likes.size == 1) tr("1 like") else tr("{0} likes", post.likes.size)
                         post.likes.size == 1 -> tr("Liked by {0}", likers[0])
-                        else -> tr("Liked by {0} and {1} more", likers[0], post.likes.size - 1)
+                        else -> tr("Liked by {0} and {1} more", likers[0], compactCount(post.likes.size - 1))
                     },
                     style = AppType.caption, color = White.copy(alpha = 0.85f),
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).pressable { likersOpen = true }.padding(vertical = 2.dp)
@@ -421,7 +464,8 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
     var confirmDelete by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf<ReportTarget?>(null) }
     var blocking by remember { mutableStateOf(false) }
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    var editing by remember { mutableStateOf(false) }
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(Modifier.clip(CircleShape).border(2.dp, White, CircleShape).padding(2.dp).clip(CircleShape).pressable(onClick = onPerson)) { PersonAvatar(post.author, 44.dp) }
 
         val pop = remember { Animatable(1f) }
@@ -433,17 +477,23 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
         }
         RailButton(
             icon = Icons.Rounded.Favorite, tint = if (liked) Color(0xFFFF4D5E) else White,
-            label = if (post.likes.isEmpty()) null else "${post.likes.size}",
+            label = if (post.likes.isEmpty()) null else compactCount(post.likes.size),
             description = if (liked) tr("Unlike") else tr("Like"), scale = pop.value
         ) { onLike(!liked) }
         RailButton(
             icon = Icons.Rounded.ChatBubble, tint = White,
-            label = if (post.comments == 0) null else "${post.comments}", description = tr("Comments")
+            label = if (post.comments == 0) null else compactCount(post.comments), description = tr("Comments")
         ) { onComments() }
+        RailButton(icon = Icons.Rounded.Share, tint = White, label = null, description = tr("Share")) {
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                .putExtra(android.content.Intent.EXTRA_TEXT, postShareText(post, appShareLink(context)))
+            runCatching { context.startActivity(android.content.Intent.createChooser(send, tr("Share"))) }
+        }
         Box {
             RailButton(icon = Icons.Rounded.MoreHoriz, tint = White, label = null, description = tr("More")) { menu = true }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                if (post.mine) {
+                if (post.mine || post.author.uid == "demo-me") {
+                    DropdownMenuItem(text = { Text(tr("Edit caption"), style = AppType.body) }, onClick = { menu = false; editing = true })
                     DropdownMenuItem(text = { Text(tr("Delete post"), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; confirmDelete = true })
                 } else {
                     DropdownMenuItem(text = { Text(tr("Report post"), style = AppType.body) }, onClick = {
@@ -457,6 +507,7 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
     }
     reporting?.let { ReportSheet(it, onDismiss = { reporting = null }) }
     if (blocking) BlockDialog(post.author, onDismiss = { blocking = false })
+    if (editing) EditCaptionDialog(post, onDismiss = { editing = false })
     if (confirmDelete) androidx.compose.material3.AlertDialog(
         onDismissRequest = { confirmDelete = false },
         containerColor = P.bgElevated,
@@ -677,25 +728,73 @@ private fun FeedLoading() {
     }
 }
 
-/** Comments from the bottom, like TikTok's: the list, then a box to add one. */
+/** A line in the comments: a comment (indented if it's a reply), or "View N more replies" under a thread. */
+internal sealed interface CommentLine {
+    data class One(val comment: Feed.Comment, val reply: Boolean) : CommentLine
+    data class More(val root: String, val hidden: Int) : CommentLine
+}
+
+/**
+ * Comments as they're listed: each thread's top comment, then its replies, oldest first. A thread
+ * with more than two replies shows the first and "View N more" until it's opened ([open]).
+ */
+internal fun commentLines(list: List<Feed.Comment>, open: Set<String>): List<CommentLine> {
+    val ids = list.map { it.id }.toSet()
+    val roots = list.filter { it.replyTo == null || it.replyTo !in ids }.sortedBy { it.at }
+    val replies = list.filter { it.replyTo != null && it.replyTo in ids }.groupBy { it.replyTo }
+    return roots.flatMap { r ->
+        val rs = replies[r.id].orEmpty().sortedBy { it.at }
+        val shown = if (r.id in open || rs.size <= 2) rs else rs.take(1)
+        listOf<CommentLine>(CommentLine.One(r, false)) + shown.map { CommentLine.One(it, true) } +
+            (if (shown.size < rs.size) listOf(CommentLine.More(r.id, rs.size - shown.size)) else emptyList())
+    }
+}
+
+/** Quick reactions over the comment box, like Instagram's. */
+private val QUICK = listOf("💪", "🔥", "👏", "🙌", "🏆", "😮", "😂", "❤️")
+
+/** Comments from the bottom, like TikTok's: threads with likes, then quick reactions and a box to add one. */
 @Composable
-private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, onDismiss: () -> Unit) {
+private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, onDismiss: () -> Unit, onPerson: (Friends.Person) -> Unit) {
     val P = LocalPalette.current
     val scope = rememberCoroutineScope()
+    val haptics = rememberFeedHaptics()
     var comments by remember { mutableStateOf<List<Feed.Comment>?>(null) }
     var text by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf<ReportTarget?>(null) }
     var blocking by remember { mutableStateOf<Friends.Person?>(null) }
     var replyingTo by remember { mutableStateOf<Feed.Comment?>(null) }
+    var open by remember { mutableStateOf(emptySet<String>()) }
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(post.id) { comments = Feed.comments(post) }
     reporting?.let { ReportSheet(it, onDismiss = { reporting = null }) }
     blocking?.let { BlockDialog(it, onDismiss = { blocking = null }) }
+    fun personOf(uid: String) = people[uid] ?: Friends.Person(uid, "", tr("someone"))
+    val myId = if (Feed.demo) "demo-me" else Feed.me()
+
+    fun toggleLike(c: Feed.Comment) {
+        val me = myId ?: return
+        val on = !c.likedByMe()
+        fun set(on: Boolean) {
+            comments = comments?.map { if (it.id == c.id) it.copy(likes = if (on) (it.likes - me) + me else it.likes - me) else it }
+        }
+        set(on)
+        if (on) haptics.tick()
+        scope.launch { if (!Feed.likeComment(post, c, on)) { set(!on); AppSnackbar.show(tr("Couldn't do that. Check your connection.")) } }
+    }
+    fun mention(handle: String) {
+        val h = handle.trimEnd('.')
+        scope.launch {
+            val found = people.values.firstOrNull { it.handle == h } ?: Friends.find(h)
+            if (found != null) onPerson(found) else AppSnackbar.show(tr("No one goes by @{0}", h))
+        }
+    }
+
     AppBottomSheet(onDismiss = onDismiss) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.75f).imePadding()) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.78f).imePadding()) {
             Text(
-                if (post.comments == 1) tr("1 comment") else tr("{0} comments", post.comments),
+                if (post.comments == 1) tr("1 comment") else tr("{0} comments", compactCount(post.comments)),
                 style = AppType.bodyStrong, color = P.textPrimary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
             )
             Box(Modifier.fillMaxWidth().height(1.dp).background(P.borderSubtle))
@@ -703,76 +802,61 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
             val list = comments?.filter { !Friends.isBlocked(it.uid) }
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)) {
                 when {
-                    list == null -> item { Text(tr("Loading…"), style = AppType.body, color = P.textSecondary, modifier = Modifier.padding(8.dp)) }
+                    list == null -> items(3) { CommentSkeleton() }
                     list.isEmpty() -> item {
                         Column(Modifier.fillMaxWidth().padding(top = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Rounded.ChatBubble, null, tint = P.textTertiary, modifier = Modifier.size(36.dp))
                             Spacer(Modifier.height(10.dp))
-                            Text(tr("No comments yet. Say something nice."), style = AppType.body, color = P.textSecondary)
+                            Text(tr("No comments yet"), style = AppType.bodyStrong, color = P.textPrimary)
+                            Text(tr("Start the conversation."), style = AppType.body, color = P.textSecondary)
                         }
                     }
-                    else -> items(threaded(list), key = { it.id }) { c ->
-                        val who = people[c.uid] ?: Friends.Person(c.uid, "", tr("someone"))
-                        val isReply = c.replyTo != null && list.any { it.id == c.replyTo }
-                        var menu by remember { mutableStateOf(false) }
-                        Row(
-                            Modifier.fillMaxWidth().padding(start = if (isReply) 48.dp else 0.dp, top = 8.dp, bottom = 4.dp).pointerInput(c.id) {
-                                detectTapGestures(onLongPress = { menu = true })
-                            },
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            PersonAvatar(who, if (isReply) 28.dp else 36.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(who.title(), style = AppType.label, color = P.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                                    Text("  " + postAge(c.at), style = AppType.caption, color = P.textTertiary)
-                                }
-                                Text(c.text, style = AppType.body, color = P.textPrimary)
-                                Text(
-                                    tr("Reply"), style = AppType.label, color = P.textTertiary,
-                                    modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(8.dp))
-                                        .pressable {
-                                            // Replies answer the comment at the top of the thread, naming who they answer.
-                                            replyingTo = c
-                                            if (isReply && c.uid != Feed.me()) text = "@" + (who.handle.ifBlank { who.title() }) + " "
-                                            runCatching { focus.requestFocus() }
-                                        }
-                                        .padding(vertical = 4.dp, horizontal = 2.dp)
+                    else -> items(commentLines(list, open), key = { line -> if (line is CommentLine.One) line.comment.id else "more" + (line as CommentLine.More).root }) { line ->
+                        when (line) {
+                            is CommentLine.More -> Text(
+                                if (line.hidden == 1) tr("View 1 more reply") else tr("View {0} more replies", line.hidden),
+                                style = AppType.label, color = P.textSecondary,
+                                modifier = Modifier.padding(start = 48.dp, top = 2.dp, bottom = 6.dp).clip(RoundedCornerShape(8.dp))
+                                    .pressable { open = open + line.root }.padding(vertical = 4.dp, horizontal = 2.dp)
+                            )
+                            is CommentLine.One -> {
+                                val c = line.comment
+                                val who = personOf(c.uid)
+                                CommentRow(
+                                    c, who, reply = line.reply, byAuthor = c.uid == post.author.uid,
+                                    canDelete = c.uid == myId || post.mine,
+                                    onPerson = { onPerson(who) },
+                                    onLike = { toggleLike(c) },
+                                    onMention = ::mention,
+                                    onReply = {
+                                        // Replies join the thread of the comment at its top, naming who they answer.
+                                        replyingTo = c
+                                        if (line.reply && c.uid != myId) text = "@" + (who.handle.ifBlank { who.title() }) + " "
+                                        runCatching { focus.requestFocus() }
+                                    },
+                                    onDelete = { scope.launch { if (Feed.deleteComment(post, c)) comments = comments?.filter { it.id != c.id } } },
+                                    onReport = { reporting = ReportTarget(who, Feed.pathOf(post), c.id, c.text) },
+                                    onBlock = { blocking = who }
                                 )
-                            }
-                            Box {
-                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                                    if (c.uid == Feed.me() || post.mine) DropdownMenuItem(
-                                        text = { Text(tr("Delete comment"), style = AppType.body, color = P.dangerText) },
-                                        onClick = {
-                                            menu = false
-                                            scope.launch { if (Feed.deleteComment(post, c)) comments = comments?.filter { it.id != c.id } }
-                                        }
-                                    )
-                                    if (c.uid != Feed.me()) {
-                                        DropdownMenuItem(text = { Text(tr("Report comment"), style = AppType.body) }, onClick = {
-                                            menu = false
-                                            reporting = ReportTarget(who, Feed.pathOf(post), c.id, c.text)
-                                        })
-                                        DropdownMenuItem(text = { Text(tr("Block {0}", who.title()), style = AppType.body, color = P.dangerText) }, onClick = {
-                                            menu = false
-                                            blocking = who
-                                        })
-                                    }
-                                }
                             }
                         }
                     }
                 }
             }
             replyingTo?.let { r ->
-                val name = (people[r.uid] ?: Friends.Person(r.uid, "", tr("someone"))).title()
                 Row(Modifier.fillMaxWidth().background(P.bgControl).padding(start = 18.dp, end = 6.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(tr("Replying to {0}", name), style = AppType.caption, color = P.textSecondary, modifier = Modifier.weight(1f))
+                    Text(tr("Replying to {0}", personOf(r.uid).title()), style = AppType.caption, color = P.textSecondary, modifier = Modifier.weight(1f))
                     Box(Modifier.size(32.dp).clip(CircleShape).pressable { replyingTo = null; text = "" }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Close, tr("Cancel"), tint = P.textSecondary, modifier = Modifier.size(16.dp))
                     }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().background(P.bgElevated).padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                QUICK.forEach { e ->
+                    Text(e, fontSize = 22.sp, modifier = Modifier.clip(CircleShape).pressable(pressedScale = 0.85f) { text = (text + e).take(500) }.padding(6.dp))
                 }
             }
             Row(Modifier.fillMaxWidth().background(P.bgElevated).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -794,8 +878,15 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
                 Box(
                     Modifier.size(42.dp).clip(CircleShape).background(if (canSend) P.accentPrimary else P.bgControl).pressable(enabled = canSend) {
                         sending = true
+                        val r = replyingTo
+                        // A reply to a reply joins the thread of its top comment.
+                        val thread = r?.let { it.replyTo?.takeIf { id -> comments.orEmpty().any { c -> c.id == id } } ?: it.id }
                         scope.launch {
-                            if (Feed.comment(post, text, replyingTo, thread = replyingTo?.let { r -> r.replyTo?.takeIf { id -> comments.orEmpty().any { it.id == id } } ?: r.id })) { text = ""; replyingTo = null; comments = Feed.comments(post) } else AppSnackbar.show(tr("Couldn't send it. Check your connection."))
+                            if (Feed.comment(post, text, r, thread = thread)) {
+                                text = ""; replyingTo = null
+                                if (thread != null) open = open + thread
+                                comments = Feed.comments(post)
+                            } else AppSnackbar.show(tr("Couldn't send it. Check your connection."))
                             sending = false
                         }
                     },
@@ -804,6 +895,171 @@ private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, 
             }
         }
     }
+}
+
+/** One comment: who (tap for their page), the words with @names you can tap, Reply, and a heart with its count. */
+@Composable
+private fun CommentRow(
+    c: Feed.Comment, who: Friends.Person, reply: Boolean, byAuthor: Boolean, canDelete: Boolean,
+    onPerson: () -> Unit, onLike: () -> Unit, onMention: (String) -> Unit, onReply: () -> Unit,
+    onDelete: () -> Unit, onReport: () -> Unit, onBlock: () -> Unit
+) {
+    val P = LocalPalette.current
+    var menu by remember { mutableStateOf(false) }
+    val mine = c.uid == (if (Feed.demo) "demo-me" else Feed.me())
+    val liked = c.likedByMe()
+    Row(
+        Modifier.fillMaxWidth().padding(start = if (reply) 48.dp else 0.dp, top = 8.dp, bottom = 4.dp).pointerInput(c.id, liked) {
+            detectTapGestures(onLongPress = { menu = true }, onDoubleTap = { if (!liked) onLike() })
+        },
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(Modifier.clip(CircleShape).pressable(onClick = onPerson)) { PersonAvatar(who, if (reply) 28.dp else 36.dp) }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    who.title(), style = AppType.label, color = P.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false).clip(RoundedCornerShape(6.dp)).pressable(onClick = onPerson)
+                )
+                if (byAuthor) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        tr("Author"), style = AppType.caption, color = P.accentPrimary,
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(P.accentSoft).padding(horizontal = 6.dp, vertical = 1.dp)
+                    )
+                }
+                Text("  " + postAge(c.at), style = AppType.caption, color = P.textTertiary)
+            }
+            CommentText(c.text, onMention)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    tr("Reply"), style = AppType.label, color = P.textTertiary,
+                    modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(8.dp)).pressable(onClick = onReply).padding(vertical = 4.dp, horizontal = 2.dp)
+                )
+            }
+            Box {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
+                    if (canDelete) DropdownMenuItem(
+                        text = { Text(tr("Delete comment"), style = AppType.body, color = P.dangerText) },
+                        onClick = { menu = false; onDelete() }
+                    )
+                    if (!mine) {
+                        DropdownMenuItem(text = { Text(tr("Report comment"), style = AppType.body) }, onClick = { menu = false; onReport() })
+                        DropdownMenuItem(text = { Text(tr("Block {0}", who.title()), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; onBlock() })
+                    }
+                }
+            }
+        }
+        // The heart: pops when you like it.
+        val pop = remember { Animatable(1f) }
+        LaunchedEffect(liked) {
+            if (liked) {
+                pop.snapTo(0.7f)
+                pop.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium))
+            }
+        }
+        Column(
+            Modifier.padding(start = 8.dp).width(36.dp).clip(RoundedCornerShape(10.dp)).pressable(pressedScale = 0.88f, onClick = onLike).padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, if (liked) tr("Unlike") else tr("Like"),
+                tint = if (liked) Color(0xFFFF4D5E) else P.textTertiary,
+                modifier = Modifier.size(18.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value }
+            )
+            if (c.likes.isNotEmpty()) Text(compactCount(c.likes.size), style = AppType.caption.copy(fontFeatureSettings = "tnum"), color = P.textTertiary)
+        }
+    }
+}
+
+/** A comment's words, with @usernames in the accent colour that open that person's page. */
+@Composable
+private fun CommentText(text: String, onMention: (String) -> Unit) {
+    val P = LocalPalette.current
+    val annotated = remember(text, P.accentPrimary) { withMentions(text, P.accentPrimary, onMention) }
+    Text(annotated, style = AppType.body, color = P.textPrimary)
+}
+
+internal fun withMentions(text: String, color: Color, onMention: (String) -> Unit): AnnotatedString = buildAnnotatedString {
+    var last = 0
+    MENTION.findAll(text).forEach { m ->
+        append(text.substring(last, m.range.first))
+        val handle = m.groupValues[1].lowercase()
+        withLink(LinkAnnotation.Clickable("@$handle", androidx.compose.ui.text.TextLinkStyles(SpanStyle(color = color, fontWeight = FontWeight.SemiBold))) { onMention(handle) }) {
+            append(m.value)
+        }
+        last = m.range.last + 1
+    }
+    append(text.substring(last))
+}
+
+/** "@name" at the start or after a space (not in an email address). */
+internal val MENTION = Regex("""(?<![\w@.])@([A-Za-z0-9_.]{3,20})""")
+
+/** While comments load: grey shapes where they'll be. */
+@Composable
+private fun CommentSkeleton() {
+    val P = LocalPalette.current
+    val pulse = rememberInfiniteTransition(label = "c_load").animateFloat(0.4f, 0.8f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "c_load_a")
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp).graphicsLayer { alpha = pulse.value }) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(P.bgControl))
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Box(Modifier.size(90.dp, 10.dp).clip(RoundedCornerShape(5.dp)).background(P.bgControl))
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.size(200.dp, 12.dp).clip(RoundedCornerShape(6.dp)).background(P.bgControl))
+        }
+    }
+}
+
+/** Change the words on your own post. */
+@Composable
+private fun EditCaptionDialog(post: Feed.Post, onDismiss: () -> Unit) {
+    val P = LocalPalette.current
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf(post.text) }
+    var busy by remember { mutableStateOf(false) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = P.bgElevated,
+        title = { Text(tr("Edit caption"), style = AppType.headline, color = P.textPrimary) },
+        text = {
+            Column {
+                Box(Modifier.fillMaxWidth().heightIn(min = 96.dp).clip(RoundedCornerShape(14.dp)).background(P.bgControl).padding(14.dp)) {
+                    if (text.isEmpty()) Text(tr("Say something about it…"), style = AppType.body, color = P.textTertiary)
+                    BasicTextField(
+                        value = text, onValueChange = { text = it.take(300) },
+                        textStyle = AppType.body.copy(color = P.textPrimary), cursorBrush = SolidColor(P.accentPrimary),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus)
+                    )
+                }
+                Text("${text.length}/300", style = AppType.caption, color = P.textTertiary, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+            }
+        },
+        confirmButton = {
+            val can = !busy && text.trim() != post.text
+            androidx.compose.material3.TextButton(enabled = can, onClick = {
+                busy = true
+                scope.launch {
+                    if (Feed.editCaption(post, text)) onDismiss() else AppSnackbar.show(tr("Couldn't do that. Check your connection."))
+                    busy = false
+                }
+            }) { Text(tr("Save"), color = if (can) P.accentPrimary else P.textTertiary, style = AppType.label) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(tr("Cancel"), color = P.textSecondary, style = AppType.label) } }
+    )
+}
+
+/** Light taps for likes, following the app's vibration setting. */
+@Composable
+internal fun rememberFeedHaptics(): Haptics {
+    val view = LocalView.current
+    val context = LocalContext.current
+    return remember(view) { Haptics(runCatching { LocalStorage.loadSettings(context).hapticsEnabled }.getOrDefault(true), view) }
 }
 
 /** Comments in threads: each top-level comment (oldest first) followed by its replies (oldest first). */
@@ -816,7 +1072,7 @@ internal fun threaded(list: List<Feed.Comment>): List<Feed.Comment> {
 
 /** One post opened from Activity, full screen, with its comments a tap away. */
 @Composable
-fun PostViewer(owner: String, id: String, onClose: () -> Unit, onPerson: (Friends.Person) -> Unit) {
+fun PostViewer(owner: String, id: String, onClose: () -> Unit, onPerson: (Friends.Person) -> Unit, openComments: Boolean = false) {
     var post by remember { mutableStateOf<Feed.Post?>(null) }
     var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(owner, id) {
@@ -834,7 +1090,7 @@ fun PostViewer(owner: String, id: String, onClose: () -> Unit, onPerson: (Friend
             when {
                 p != null -> {
                     val live = Feed.posts?.firstOrNull { it.id == p.id && it.author.uid == p.author.uid } ?: p
-                    FeedPager(listOf(live), Feed.people, onFriends = {}, onNewPost = {}, endPage = false, onOpenPerson = { onClose(); onPerson(it) })
+                    FeedPager(listOf(live), Feed.people, onFriends = {}, onNewPost = {}, endPage = false, onOpenPerson = { onClose(); onPerson(it) }, openComments = openComments)
                 }
                 loaded -> Text(
                     tr("This post isn't available anymore."), style = AppType.body, color = White.copy(alpha = 0.8f),
@@ -848,3 +1104,5 @@ fun PostViewer(owner: String, id: String, onClose: () -> Unit, onPerson: (Friend
         }
     }
 }
+
+private fun Friends.Person.isMeOrDemo() = uid == Feed.me() || uid == "demo-me"

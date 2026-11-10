@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -148,7 +149,12 @@ fun PersonPage(person: Friends.Person, onClose: () -> Unit) {
                     item(span = { GridItemSpan(3) }) { Locked(person, relation) }
                 } else {
                     if (relation == Relation.ME && !Feed.demo) item(span = { GridItemSpan(3) }) {
-                        MyActions(onEdit = { editing = true }, onFriends = { friendsOpen = true }, onSettings = { settingsOpen = true })
+                        MyActions(onEdit = { editing = true }, onFriends = { friendsOpen = true }, onSettings = { settingsOpen = true }, onShare = {
+                            val h = person.handle.ifBlank { Friends.myHandle.orEmpty() }
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                                .putExtra(android.content.Intent.EXTRA_TEXT, tr("Add me on Kilonaut: @{0}", h) + "\n" + appShareLink(context))
+                            runCatching { context.startActivity(android.content.Intent.createChooser(send, tr("Share profile"))) }
+                        })
                     }
                     item(span = { GridItemSpan(3) }) { Numbers(stats, hue, loaded) }
                     stats?.let { s -> item(span = { GridItemSpan(3) }) { Week(s, hue) } }
@@ -286,7 +292,7 @@ private fun Header(person: Friends.Person, relation: Relation, photo: androidx.c
 
 /** Your own page: Edit profile, Friends and settings, side by side. */
 @Composable
-private fun MyActions(onEdit: () -> Unit, onFriends: () -> Unit, onSettings: () -> Unit) {
+private fun MyActions(onEdit: () -> Unit, onFriends: () -> Unit, onSettings: () -> Unit, onShare: () -> Unit) {
     val P = LocalPalette.current
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         @Composable
@@ -298,6 +304,9 @@ private fun MyActions(onEdit: () -> Unit, onFriends: () -> Unit, onSettings: () 
         Button(tr("Edit profile"), Modifier.weight(1f), onEdit)
         val n = Friends.circle?.friends?.size ?: 0
         Button(if (n == 1) tr("1 friend") else tr("{0} friends", n), Modifier.weight(1f), onFriends)
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(P.bgControl).pressable(onClick = onShare), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Share, tr("Share profile"), tint = P.textPrimary, modifier = Modifier.size(20.dp))
+        }
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(P.bgControl).pressable(onClick = onSettings), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Settings, tr("Social settings"), tint = P.textPrimary, modifier = Modifier.size(20.dp))
         }

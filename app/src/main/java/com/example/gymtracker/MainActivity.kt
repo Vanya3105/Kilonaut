@@ -678,7 +678,7 @@ fun GymTrackerApp(
                         onOpenExercise = { openExercise = it },
                         onMergeExercises = { from, into -> mergeExercises(from, into) }
                     )
-                    AppTab.FEED -> FeedScreen(history = history, active = selectedTab == AppTab.FEED)
+                    AppTab.FEED -> FeedScreen(history = history, active = selectedTab == AppTab.FEED, onTryWorkout = { repeatWorkout(it) })
                     AppTab.PROFILE -> SettingsScreen(
                         settings = settings,
                         userProfile = userProfile,
@@ -1378,6 +1378,10 @@ private fun BottomNavBar(selected: AppTab, onSelect: (AppTab) -> Unit) {
                                     modifier = Modifier.size(24.dp).graphicsLayer { scaleX = bounce.value; scaleY = bounce.value }
                                 )
                             }
+                            // Something new from friends (a request, a like, a comment) while you're elsewhere.
+                            if (tab == AppTab.FEED && !isSelected && (Friends.requestCount > 0 || ActivityLog.unread > 0)) Box(
+                                Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = 5.dp).size(9.dp).clip(CircleShape).background(P.accentPrimary)
+                            )
                         }
                         Spacer(Modifier.height(1.dp))
                         CappedTextSize {
