@@ -101,14 +101,15 @@ fun AgreeToRules(checked: Boolean, onChange: (Boolean) -> Unit) {
 
 /**
  * Shown in place of Friends or the feed until the rules are agreed to (people who picked a
- * username before there were rules).
+ * username before there were rules). It doesn't scroll itself: on Profile → Friends it sits in a
+ * page that already scrolls, and a scrolling column inside another crashes; others wrap it.
  */
 @Composable
 fun CommunityRulesGate(modifier: Modifier = Modifier) {
     val P = LocalPalette.current
     val context = LocalContext.current
     Column(
-        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier.fillMaxWidth().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(Modifier.size(64.dp).clip(CircleShape).background(P.accentSoft), contentAlignment = Alignment.Center) {

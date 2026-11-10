@@ -136,7 +136,9 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true) {
             handle == null -> FeedEmpty(Icons.Rounded.PersonAdd, tr("Set up Friends"), tr("Pick a username so friends can find you. Then their workouts show up here.")) {
                 PrimaryButton(tr("Pick a username"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
-            CommunityRules.agreed == false -> CommunityRulesGate(Modifier.statusBarsPadding().padding(top = 70.dp))
+            CommunityRules.agreed == false -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                CommunityRulesGate(Modifier.statusBarsPadding().padding(top = 70.dp))
+            }
             posts == null && Feed.failed && !Feed.loading -> FeedEmpty(Icons.Rounded.CloudOff, tr("Couldn't load the feed"), tr("Check your connection and try again.")) {
                 PrimaryButton(tr("Try again"), { scope.launch { Feed.refresh(context) } }, Modifier.fillMaxWidth())
             }

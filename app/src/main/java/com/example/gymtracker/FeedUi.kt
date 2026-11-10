@@ -220,7 +220,7 @@ internal fun PostComposer(start: CompletedWorkout?, history: List<CompletedWorko
     // Posting means agreeing to the rules (from the finish screen too, which skips the feed).
     remember { CommunityRules.load(context) }
     if (CommunityRules.agreed == false) {
-        FullPage(tr("New post"), onClose = onClose) { CommunityRulesGate() }
+        FullPage(tr("New post"), onClose = onClose) { Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { CommunityRulesGate() } }
         return
     }
     FullPage(
