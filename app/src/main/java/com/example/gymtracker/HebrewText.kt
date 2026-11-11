@@ -1079,7 +1079,7 @@ internal object HebrewText {
         m["A better finish"] = "סיום טוב יותר"
         m["Pick a username, find friends by it and follow each other. Only friends see what you share."] = "בחרו שם משתמש, מצאו חברים לפיו ועקבו זה אחר זה. רק חברים רואים את מה שאתם משתפים."
         m["A feed to swipe through"] = "פיד שגוללים בו"
-        m["Share a workout, a photo or a few words, and swipe up through your friends' posts. Double-tap to like."] = "שתפו אימון, תמונה או כמה מילים, וגללו למעלה בין הפוסטים של החברים. הקשה כפולה לאהוב."
+        m["Share a workout you logged, with a few words if you like, and swipe up through your friends' posts. Double-tap to like."] = "שתפו אימון שתיעדתם, עם כמה מילים אם תרצו, וגללו למעלה בין הפוסטים של החברים. הקשה כפולה לאהוב."
         m["Comments that talk back"] = "תגובות עם שיחה"
         m["Reply to a comment, like it, mention someone with @, or answer with one tap of an emoji."] = "השיבו לתגובה, אהבו אותה, תייגו מישהו עם @, או ענו בהקשה אחת על אימוג'י."
         m["Do a friend's workout"] = "לעשות אימון של חבר"

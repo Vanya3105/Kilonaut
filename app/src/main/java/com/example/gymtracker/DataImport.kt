@@ -291,17 +291,40 @@ private class ExerciseNamer(known: Collection<String>) {
                     else -> { add("$equipment $base"); add("$base $equipment") }
                 }
             }
-            add(base)
         }
         for (c in candidates) knownByKey[sameExerciseKey(c)]?.let { return@getOrPut it }
-        for (c in candidates) {
-            val key = sameExerciseKey(c)
-            ExerciseDatabase.all.firstOrNull { e -> sameExerciseKey(e.name) == key || e.aliases.any { sameExerciseKey(it) == key } }?.let { lib ->
-                // The library's exercise may already be logged here under a variant of its name.
-                return@getOrPut knownByKey[sameExerciseKey(lib.name)] ?: lib.name
-            }
-        }
+        // The name without its equipment only counts when the equipment agrees: "Incline Bench Press
+        // (Dumbbell)" isn't the library's Incline Barbell Bench Press ("barbell" is left out of keys).
+        knownByKey[sameExerciseKey(base)]?.takeIf { fits(ExerciseDatabase.find(it), equipment) }?.let { return@getOrPut it }
+        for (c in candidates) library(c)?.let { return@getOrPut knownByKey[sameExerciseKey(it.name)] ?: it.name }
+        library(base)?.takeIf { fits(it, equipment) }?.let { return@getOrPut knownByKey[sameExerciseKey(it.name)] ?: it.name }
+        // Same words in another order, the equipment among them: "Incline Bench Press (Dumbbell)" →
+        // Incline Dumbbell Press, "Bicep Curl (Dumbbell)" → Dumbbell Curl. The fullest match wins.
+        val words = sameExerciseKey("$base $equipment").split(' ').toSet()
+        val first = sameExerciseKey(base).substringBefore(' ')
+        ExerciseDatabase.all
+            .filter { fits(it, equipment) }
+            .map { it to sameExerciseKey(it.name).split(' ') }
+            .filter { (_, w) -> w.size >= 2 && words.containsAll(w) }
+            // On a tie, the one keeping the name's first word: "Incline …" is Incline Dumbbell Press, not Dumbbell Bench Press.
+            .maxWithOrNull(compareBy({ (_, w) -> w.size }, { (_, w) -> first in w }))
+            ?.let { (lib, _) -> return@getOrPut knownByKey[sameExerciseKey(lib.name)] ?: lib.name }
         fileName.trim()
+    }
+
+    private fun library(name: String): ExerciseInfo? {
+        val key = sameExerciseKey(name)
+        return ExerciseDatabase.all.firstOrNull { e -> sameExerciseKey(e.name) == key || e.aliases.any { sameExerciseKey(it) == key } }
+    }
+
+    /** Whether a library exercise can be the one done with the file's [equipment] ("" when it didn't say). */
+    private fun fits(lib: ExerciseInfo?, equipment: String): Boolean {
+        if (lib == null || equipment.isEmpty()) return true
+        val e = equipment.lowercase(Locale.US)
+        val l = lib.equipment.lowercase(Locale.US)
+        if (e in setOf("bodyweight", "assisted", "weighted", "other", "none") || "other" in e) return true
+        // Strong's "Cable - Straight Bar" or "Smith Machine" still name the library's Cable / Machine.
+        return e.contains(l) || l.contains(e) || (l == "ez bar" && "ez" in e)
     }
 }
 

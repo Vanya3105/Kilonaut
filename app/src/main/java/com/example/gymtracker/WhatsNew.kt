@@ -64,7 +64,7 @@ object WhatsNew {
     internal fun notesFor(version: String): List<Item> = when (version) {
         "1.0.0-beta.3" -> listOf(
             Item(Icons.Rounded.Group, tr("Friends"), tr("Pick a username, find friends by it and follow each other. Only friends see what you share.")),
-            Item(Icons.Rounded.DynamicFeed, tr("A feed to swipe through"), tr("Share a workout, a photo or a few words, and swipe up through your friends' posts. Double-tap to like.")),
+            Item(Icons.Rounded.DynamicFeed, tr("A feed to swipe through"), tr("Share a workout you logged, with a few words if you like, and swipe up through your friends' posts. Double-tap to like.")),
             Item(Icons.Rounded.Forum, tr("Comments that talk back"), tr("Reply to a comment, like it, mention someone with @, or answer with one tap of an emoji.")),
             Item(Icons.Rounded.FitnessCenter, tr("Do a friend's workout"), tr("Open the workout on a friend's post and start it yourself, with weights from your own training.")),
             Item(Icons.Rounded.NotificationsActive, tr("Activity"), tr("Likes, comments and friend requests in one place, grouped, with a dot on Feed when something's new. Choose which ones notify you.")),

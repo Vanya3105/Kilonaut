@@ -190,4 +190,20 @@ class DataImportTest {
         assertNull(parseExportDate("yesterday"))
         assertEquals(158 * 60L, parseStrongDuration("2h 38m"))
     }
+
+    @Test
+    fun strong_equipmentDecidesTheExercise() {
+        val csv = """
+            Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout Notes,RPE
+            2026-10-20 18:00:00,Push,1h,Incline Bench Press (Dumbbell),1,22,10,0,0,,,
+            2026-10-20 18:00:00,Push,1h,Incline Bench Press (Barbell),1,50,8,0,0,,,
+            2026-10-20 18:00:00,Push,1h,Bicep Curl (Dumbbell),1,12,10,0,0,,,
+            2026-10-20 18:00:00,Push,1h,Hammer Curl (Dumbbell),1,12,10,0,0,,,
+            2026-10-20 18:00:00,Push,1h,Bench Press (Barbell),1,60,8,0,0,,,
+        """.trimIndent()
+        val names = parseWorkoutExport(csv, WeightUnit.KG, knownNames = listOf("Bench Press"), bodyWeightKg = 80f)!!
+            .workouts.single().exercises.map { it.name }
+        // The dumbbell press isn't the barbell one; what's logged here already keeps its name.
+        assertEquals(listOf("Incline Dumbbell Press", "Incline Barbell Bench Press", "Dumbbell Curl", "Hammer Curl", "Bench Press"), names)
+    }
 }
