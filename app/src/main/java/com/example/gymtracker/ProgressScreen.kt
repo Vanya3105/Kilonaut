@@ -87,6 +87,9 @@ fun ProgressScreen(
 
         item { ConsistencyCard(history, onOpenCalendar, Modifier.enterAnimation(0)) }
 
+        // Hidden until something weighted is logged: the card draws nothing then.
+        item { WeeklyVolumeCard(history, Modifier.enterAnimation(1)) }
+
         item {
             SectionHeader(
                 tr("Best lifts"),

@@ -512,14 +512,14 @@ private fun ExerciseSummary(rows: List<Triple<ExerciseEntry, SetEntry?, Boolean>
 }
 
 /** A workout photo, or that it's still loading. */
-private class PhotoState(val bitmap: ImageBitmap?, val loading: Boolean)
+internal class PhotoState(val bitmap: ImageBitmap?, val loading: Boolean)
 
 /**
  * A photo from [PhotoStorage]: at once when it's already decoded, otherwise decoded off the main
  * thread (a 1400 px JPEG takes tens of milliseconds, a dropped frame or two mid-scroll).
  */
 @Composable
-private fun rememberPhoto(path: String?): PhotoState {
+internal fun rememberPhoto(path: String?): PhotoState {
     if (path.isNullOrBlank()) return PhotoState(null, loading = false)
     val cached = remember(path) { PhotoStorage.cached(path) }
     if (cached != null) return PhotoState(cached, loading = false)

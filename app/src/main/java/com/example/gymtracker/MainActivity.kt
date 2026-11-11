@@ -299,6 +299,8 @@ fun GymTrackerApp(
             restore = { id -> mutableStateOf(LocalStorage.loadHistory(context).find { it.id == id }) }
         )
     ) { mutableStateOf(null) }
+    // A logged workout's page (from History); editing it opens over this page.
+    var viewingWorkoutId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Exercise detail screen, shown over everything else (including a running workout).
     var openExercise by rememberSaveable { mutableStateOf<String?>(null) }
     var editingProgramId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -658,7 +660,7 @@ fun GymTrackerApp(
                     AppTab.HISTORY -> HistoryScreen(
                         history = history,
                         userProfile = userProfile,
-                        onOpenWorkout = { openPastWorkout(it) },
+                        onOpenWorkout = { viewingWorkoutId = it.id },
                         onDeleteWorkout = { deletePastWorkout(it) },
                         onRepeatWorkout = { repeatWorkout(it) }
                     )
@@ -725,6 +727,28 @@ fun GymTrackerApp(
         // The tabs draw edge to edge; this keeps scrolled content from running under the clock.
         // Not over the feed's posts: they run full screen under the clock, like a photo app.
         if (!(selectedTab == AppTab.FEED && Feed.fullBleed)) StatusBarScrim()
+
+        // Looked up by id, so a saved edit shows at once and a deleted workout closes its page.
+        val viewedWorkout = viewingWorkoutId?.let { id -> history.find { it.id == id } }
+        var shownWorkout by remember { mutableStateOf(viewedWorkout) }
+        if (viewedWorkout != null) shownWorkout = viewedWorkout
+        AnimatedVisibility(
+            visible = viewedWorkout != null,
+            enter = pageEnter(endSign()),
+            exit = pageExit(endSign())
+        ) {
+            shownWorkout?.let { w ->
+                WorkoutSummaryScreen(
+                    workout = w,
+                    history = history,
+                    onBack = { viewingWorkoutId = null },
+                    onEdit = { openPastWorkout(w) },
+                    onRepeat = { viewingWorkoutId = null; repeatWorkout(w) },
+                    onDelete = { viewingWorkoutId = null; deletePastWorkout(w) },
+                    onOpenExercise = { openExercise = it }
+                )
+            }
+        }
 
         // Full-screen workout (live or editing a past one) slides up over the tabs.
         AnimatedVisibility(

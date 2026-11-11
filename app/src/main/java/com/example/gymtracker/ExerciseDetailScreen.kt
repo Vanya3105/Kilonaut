@@ -856,7 +856,7 @@ fun ExerciseGuideBody(exerciseName: String, muscle: String, modifier: Modifier =
 }
 
 @Composable
-private fun Legend(color: androidx.compose.ui.graphics.Color, label: String) {
+internal fun Legend(color: androidx.compose.ui.graphics.Color, label: String) {
     val P = LocalPalette.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(color))
