@@ -86,57 +86,6 @@ internal fun PersonAvatar(p: Friends.Person, size: Dp, ring: Boolean = false, im
 
 internal fun Friends.Person.title() = name.ifBlank { "@$handle" }
 
-/** Profile's way in: friends' faces, how many, and a badge for requests. */
-@Composable
-fun FriendsCard(onOpen: () -> Unit) {
-    val P = LocalPalette.current
-    val context = LocalContext.current
-    val signedIn = Account.user != null
-    LaunchedEffect(signedIn) { if (signedIn) { Friends.loadMe(context); Friends.refresh() } }
-    val circle = Friends.circle
-    AppCard(Modifier.fillMaxWidth(), onClick = onOpen, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val faces = circle?.friends.orEmpty().take(3)
-            if (faces.isEmpty()) {
-                Box(Modifier.size(40.dp).clip(CircleShape).background(P.accentSoft), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Group, null, tint = P.accentPrimary, modifier = Modifier.size(22.dp))
-                }
-            } else {
-                // Overlapping faces, like a group.
-                Box(Modifier.width(40.dp + 18.dp * (faces.size - 1)).height(40.dp)) {
-                    faces.forEachIndexed { i, f ->
-                        Box(Modifier.padding(start = 18.dp * i).zIndex(-i.toFloat()).clip(CircleShape).background(P.bgCard).padding(2.dp)) {
-                            PersonAvatar(f, 36.dp)
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(tr("Friends"), style = AppType.bodyStrong, color = P.textPrimary)
-                Text(
-                    when {
-                        !signedIn -> tr("Sign in to add friends")
-                        circle == null -> tr("See how your friends train")
-                        circle.friends.isEmpty() -> tr("Add friends by their username")
-                        circle.friends.size == 1 -> tr("1 friend")
-                        else -> tr("{0} friends", circle.friends.size)
-                    },
-                    style = AppType.caption, color = P.textSecondary
-                )
-            }
-            if (Friends.requestCount > 0) {
-                Pill(
-                    if (Friends.requestCount == 1) tr("1 request") else tr("{0} requests", Friends.requestCount),
-                    color = P.onAccentPrimary, container = P.accentPrimary
-                )
-                Spacer(Modifier.width(6.dp))
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = P.textTertiary, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
 /** The Friends page: you, search, requests, friends with how they're doing, and requests you sent. */
 @Composable
 fun FriendsSection() {

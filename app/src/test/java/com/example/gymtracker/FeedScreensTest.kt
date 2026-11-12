@@ -10,6 +10,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -97,6 +99,98 @@ class FeedScreensTest {
     @Test fun textOnly() = draw("3-text", 2)
     @Test fun midSwipe() = draw("4-swipe", 0, 0.35f)
     @Test fun caughtUp() = draw("5-end", 3)
+
+    private fun drawCards(name: String, palette: GymPalette) {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        val list = posts()
+        compose.setContent {
+            GymTheme(palette) {
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(palette.bgPrimary)) {
+                    FeedTopBar(onPosts = false, canPost = true, onFriends = {}, onNewPost = {}, onMe = {}, onFindFriends = {})
+                    FeedList(list, listOf(maya, dan, noa).associateBy { it.uid }, onFriends = {}, onNewPost = {}, onOpenPerson = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        save(name)
+    }
+
+    /** Today's friends row with the sample feed's people (Maya trained today: accent ring). */
+    @Test
+    fun todayFriends() {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        Feed.showDemo()
+        compose.setContent {
+            GymTheme(LightPalette) {
+                Box(Modifier.fillMaxSize().background(LightPalette.bgPrimary)) {
+                    TodayFriends(Modifier.padding(20.dp))
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        save("9-today-friends")
+    }
+
+    /** A History card, Hevy style: stats strip, exercises with pictures and best sets, muscles line. */
+    private fun drawHistoryCard(name: String, palette: GymPalette) {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        fun s(w: String, r: String) = SetEntry(setNumber = 1, weight = w, reps = r, isCompleted = true)
+        val w = CompletedWorkout(
+            id = 1_762_900_000_000L, splitTitle = "Push A", dateKey = "2026-11-11", displayDate = "2026-11-11", durationSeconds = 3120,
+            bodyWeightKg = 80f, photoPath = null, skippedExercises = emptyList(), exercises = listOf(
+                ExerciseEntry("Barbell Bench Press", "Chest", sets = listOf(s("80", "8"), s("80", "8"), s("80", "7"))),
+                ExerciseEntry("Incline Dumbbell Press", "Chest", sets = listOf(s("28", "10"), s("28", "10"), s("28", "9"))),
+                ExerciseEntry("Overhead Press", "Shoulders", sets = listOf(s("45", "8"), s("45", "8"))),
+                ExerciseEntry("Triceps Pushdown", "Triceps", sets = listOf(s("30", "12"), s("30", "12"))),
+                ExerciseEntry("Lateral Raise", "Shoulders", sets = listOf(s("10", "15"), s("10", "15")))
+            )
+        ).let { it.copy(totalVolumeKg = it.exercises.sumOf { e -> e.sets.sumOf { x -> (x.weightKg * x.repCount).toDouble() } }.toInt()) }
+        compose.setContent {
+            GymTheme(palette) {
+                Box(Modifier.fillMaxSize().background(palette.bgPrimary).padding(16.dp)) {
+                    WorkoutHistoryCard(w, listOf(w), onOpen = {}, onDelete = {}, onViewPhoto = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        save(name)
+    }
+
+    /** Profile's dashboard over a few months of made-up training. */
+    private fun drawDashboard(name: String, palette: GymPalette) {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        val day = 24 * 3_600_000L
+        val now = System.currentTimeMillis()
+        val history = (0 until 40).map { i ->
+            val at = now - (i * 2.3 * day).toLong()
+            CompletedWorkout(
+                id = at, splitTitle = "Push", dateKey = "", displayDate = "", durationSeconds = 2400L + (i % 5) * 600L,
+                bodyWeightKg = 80f, photoPath = null, skippedExercises = emptyList(),
+                exercises = listOf(ExerciseEntry("Barbell Bench Press", "Chest", sets = List(3 + i % 3) { SetEntry(setNumber = it + 1, weight = "${60 + i % 4 * 5}", reps = "8", isCompleted = true) })),
+                totalVolumeKg = 1
+            )
+        }
+        compose.setContent {
+            GymTheme(palette) {
+                Box(Modifier.fillMaxSize().background(palette.bgPrimary).padding(16.dp)) { ProfileDashboard(history) }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.waitForIdle()
+        save(name)
+    }
+
+    @Test fun dashboard() = drawDashboard("11-dashboard", LightPalette)
+    @Test fun dashboardDark() = drawDashboard("11-dashboard-dark", DarkPalette)
+
+    @Test fun historyCard() = drawHistoryCard("10-history-card", LightPalette)
+    @Test fun historyCardDark() = drawHistoryCard("10-history-card-dark", DarkPalette)
+
+    @Test fun cards() = drawCards("8-cards", LightPalette)
+    @Test fun cardsDark() = drawCards("8-cards-dark", DarkPalette)
 
     /** The sample feed's first post with its comments open: threads, likes on comments, quick reactions. */
     @Test

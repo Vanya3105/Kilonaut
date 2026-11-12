@@ -42,6 +42,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Constraints
+import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,10 +86,36 @@ fun HistoryScreen(
         listOf(TutorialStepInfo("CARD", tr("Your workouts"), tr("Tap a workout to see or edit every set. ⋮ shares it as an image or deletes it. Swipe sideways for other weeks."))),
         ready = history.isNotEmpty()
     )
+    // The title, calendar and Week | Month slide away as the workouts scroll up and come back on the
+    // way down: fixed, they took over half the screen and left room for one card.
+    var headerHeight by remember { mutableIntStateOf(0) }
+    var headerOffset by remember { mutableFloatStateOf(0f) }
+    val collapse = remember {
+        object : NestedScrollConnection {
+            fun move(dy: Float): Offset {
+                val old = headerOffset
+                headerOffset = (old + dy).coerceIn(-headerHeight.toFloat(), 0f)
+                return Offset(0f, headerOffset - old)
+            }
+            // Up: the header goes first. Down: the list comes back to its top first, then the header.
+            override fun onPreScroll(available: Offset, source: NestedScrollSource) = if (available.y < 0f) move(available.y) else Offset.Zero
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = if (available.y > 0f) move(available.y) else Offset.Zero
+        }
+    }
     Box(Modifier.fillMaxSize()) {
     CompositionLocalProvider(LocalHistoryIndex provides byExercise, LocalHistoryTip provides tour) {
-    Column(Modifier.fillMaxSize()) {
-        Column(Modifier.statusBarsPadding().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp)) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().nestedScroll(collapse)) {
+        Column(
+            Modifier
+                .clipToBounds()
+                .layout { measurable, constraints ->
+                    val p = measurable.measure(constraints.copy(maxHeight = Constraints.Infinity))
+                    val off = headerOffset.roundToInt().coerceIn(-p.height, 0)
+                    layout(p.width, p.height + off) { p.place(0, off) }
+                }
+                .onSizeChanged { headerHeight = it.height }
+                .padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp)
+        ) {
             Text(tr("History"), style = AppType.display, color = P.textPrimary)
             Spacer(Modifier.height(14.dp))
             // One calendar, one place: six months at a glance; a day opens in the month below.
@@ -416,13 +451,19 @@ fun WorkoutHistoryCard(
                 }
             }
         }
+        // The numbers as Hevy's cards show them: a label over each, read across in one glance.
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill(formatDuration(workout.durationSeconds), icon = Icons.Rounded.Schedule)
-            Pill(tr("{0} sets", sets))
-            if (workout.totalVolumeKg > 0) Pill(formatVolume(workout.totalVolumeKg))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            CardStat(tr("Duration"), formatDuration(workout.durationSeconds))
+            if (workout.totalVolumeKg > 0) CardStat(tr("Volume"), formatVolume(workout.totalVolumeKg))
+            CardStat(tr("Sets"), sets.toString())
         }
         ExerciseSummary(rows)
+        val muscles = remember(workout) { musclesWorked(workout) }
+        if (muscles.isNotEmpty()) Text(
+            muscles.joinToString(" · ") { shown(it) }, style = AppType.caption, color = P.textTertiary,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp)
+        )
         val note = remember(workout, allHistory) { LocalStorage.getWorkoutNote(context, workout.id) }
         if (note.isNotBlank()) {
             Text(
@@ -469,6 +510,24 @@ fun WorkoutHistoryCard(
 
 private const val SUMMARY_ROWS = 4
 
+@Composable
+private fun CardStat(label: String, value: String) {
+    val P = LocalPalette.current
+    Column {
+        Text(label, style = AppType.caption, color = P.textSecondary)
+        Text(value, style = AppType.bodyStrong.copy(fontFeatureSettings = "tnum"), color = P.textPrimary, maxLines = 1)
+    }
+}
+
+/** The muscles a workout trained, most work sets first; three at most, so it stays one line. */
+internal fun musclesWorked(workout: CompletedWorkout): List<String> =
+    workout.exercises.filter { !it.isSkipped }
+        .groupBy { ExerciseDatabase.find(it.name)?.muscle ?: it.targetMuscle }
+        .filterKeys { it.isNotBlank() }
+        .mapValues { (_, list) -> list.sumOf { it.workSets.size } }
+        .filterValues { it > 0 }
+        .entries.sortedByDescending { it.value }.take(3).map { it.key }
+
 /** Each exercise with its best set and whether it was a new best. */
 @Composable
 private fun summaryRows(workout: CompletedWorkout, allHistory: List<CompletedWorkout>): List<Triple<ExerciseEntry, SetEntry?, Boolean>> {
@@ -492,12 +551,17 @@ private fun ExerciseSummary(rows: List<Triple<ExerciseEntry, SetEntry?, Boolean>
     val P = LocalPalette.current
     if (rows.isEmpty()) return
     Spacer(Modifier.height(12.dp))
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(P.bgControl).padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(P.borderSubtle))
+    Spacer(Modifier.height(6.dp))
+    Column(Modifier.fillMaxWidth()) {
         rows.take(SUMMARY_ROWS).forEach { (ex, best, isBest) ->
             Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                ExerciseThumb(ex.name, size = 32.dp, showEmpty = true)
+                Spacer(Modifier.width(10.dp))
                 // Only warm-ups (or nothing) logged: a dash, not "0 ×".
-                Text(ex.workSets.size.let { if (it == 0) "–" else "$it ×" }, style = AppType.caption.copy(fontFeatureSettings = "tnum"), color = P.textTertiary, modifier = Modifier.width(28.dp))
-                Text(shown(ex.name), style = AppType.label, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                val count = ex.workSets.size.let { if (it == 0) "–" else "$it ×" }
+                Text("$count ${shown(ex.name)}", style = AppType.body, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
                 if (isBest) {
                     Icon(Icons.Rounded.EmojiEvents, tr("New best"), tint = P.warningText, modifier = Modifier.padding(end = 4.dp).size(14.dp))
                 }
@@ -506,20 +570,20 @@ private fun ExerciseSummary(rows: List<Triple<ExerciseEntry, SetEntry?, Boolean>
         }
         if (rows.size > SUMMARY_ROWS) {
             val more = rows.size - SUMMARY_ROWS
-            Text(if (more == 1) tr("+1 more exercise") else tr("+{0} more exercises", more), style = AppType.caption, color = P.textTertiary, modifier = Modifier.padding(top = 2.dp, bottom = 2.dp))
+            Text(if (more == 1) tr("+1 more exercise") else tr("+{0} more exercises", more), style = AppType.caption, color = P.textTertiary, modifier = Modifier.padding(start = 42.dp, top = 2.dp))
         }
     }
 }
 
 /** A workout photo, or that it's still loading. */
-private class PhotoState(val bitmap: ImageBitmap?, val loading: Boolean)
+internal class PhotoState(val bitmap: ImageBitmap?, val loading: Boolean)
 
 /**
  * A photo from [PhotoStorage]: at once when it's already decoded, otherwise decoded off the main
  * thread (a 1400 px JPEG takes tens of milliseconds, a dropped frame or two mid-scroll).
  */
 @Composable
-private fun rememberPhoto(path: String?): PhotoState {
+internal fun rememberPhoto(path: String?): PhotoState {
     if (path.isNullOrBlank()) return PhotoState(null, loading = false)
     val cached = remember(path) { PhotoStorage.cached(path) }
     if (cached != null) return PhotoState(cached, loading = false)

@@ -217,8 +217,8 @@ fun SettingsScreen(
                     )
                 }
             }
-            SettingsPage.WORKOUTS -> {
-                    SettingsGroup(tr("Workouts")) {
+            SettingsPage.TRAINING -> {
+                    SettingsGroup(tr("During a workout")) {
                         Text(tr("Units"), style = AppType.label, color = P.textSecondary)
                         Spacer(Modifier.height(8.dp))
                         SegmentedControl(
@@ -272,11 +272,9 @@ fun SettingsScreen(
                         }
                     }
         
-            }
-            SettingsPage.REMINDERS -> {
                 RemindersGroup(settings, userProfile.daysPerWeek, onUpdateSettings)
             }
-            SettingsPage.BACKUPS -> {
+            SettingsPage.DATA -> {
                     SettingsGroup(tr("Backups")) {
                         BackupsSection(
                             onRestoreContent = { pendingBackup = it },
@@ -285,11 +283,7 @@ fun SettingsScreen(
                         )
                     }
         
-            }
-            SettingsPage.HEALTH -> {
                 HealthConnectGroup(onImported = onDataRestored)
-            }
-            SettingsPage.APPS -> {
                     SettingsGroup(tr("Other apps")) {
                         LinkRow(Icons.Rounded.MoveToInbox, tr("Import from Strong or Hevy")) {
                             otherAppLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
@@ -311,7 +305,7 @@ fun SettingsScreen(
                     }
         
             }
-            SettingsPage.APPEARANCE -> {
+            SettingsPage.APP -> {
                     SettingsGroup(tr("Appearance")) {
                         SegmentedControl(
                             options = listOf(THEME_SYSTEM to tr("System"), THEME_LIGHT to tr("Light"), THEME_DARK to tr("Dark")),
@@ -328,8 +322,7 @@ fun SettingsScreen(
                         )
                     }
         
-            }
-            SettingsPage.HELP -> {
+
                     SettingsGroup(tr("Help")) {
                         LinkRow(Icons.Rounded.Lightbulb, tr("Show tips again")) {
                             TutorialPrefs.resetAllTutorials(context)
@@ -346,8 +339,7 @@ fun SettingsScreen(
                         }
                     }
         
-            }
-            SettingsPage.ADVANCED -> {
+
                     SettingsGroup(tr("Advanced")) {
                         ToggleRow(
                             title = tr("Smooth scrolling"),
@@ -367,8 +359,8 @@ fun SettingsScreen(
                         LinkRow(Icons.Rounded.DeleteForever, tr("Delete all data"), danger = true) { confirmDeleteAll = true }
                     }
         
+                AboutGroup()
             }
-            SettingsPage.ABOUT -> AboutGroup()
             SettingsPage.WHATS_NEW -> Unit
         }
     }
@@ -386,7 +378,8 @@ fun SettingsScreen(
 
         item { ProfileStats(history, programFor(userProfile.splitProgram).weeklyGoal) }
 
-        if (Account.available(context)) item { FriendsCard(onOpen = { page = SettingsPage.FRIENDS }) }
+        item { ProfileDashboard(history) }
+
 
         item {
             SettingsGroup(tr("Your training")) {
@@ -454,7 +447,7 @@ fun SettingsScreen(
                 val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT && it != SettingsPage.SPLIT && it != SettingsPage.FRIENDS }
                 pages.forEachIndexed { i, entry ->
                     if (i > 0) Box(Modifier.padding(start = 52.dp).fillMaxWidth().height(1.dp).background(P.borderSubtle))
-                    SettingsRow(entry.icon, entry.title, danger = false) {
+                    SettingsRow(entry.icon, entry.title, subtitle = entry.contents) {
                         if (entry == SettingsPage.WHATS_NEW) showWhatsNew = true else page = entry
                     }
                 }
@@ -467,7 +460,7 @@ fun SettingsScreen(
         enter = slideInHorizontally(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(150)),
         exit = slideOutHorizontally(tween(220)) { it / 4 } + fadeOut(tween(200))
     ) {
-        shownPage?.let { p -> SettingsPageScreen(p.title, onBack = { page = null }) { PageContent(p) } }
+        shownPage?.let { p -> SettingsPageScreen(p.title, sections = p.sections, onBack = { page = null }) { PageContent(p) } }
     }
     if (showWhatsNew) {
         val version = remember { WhatsNew.currentVersion(context) }
@@ -934,43 +927,46 @@ private fun SettingsGroup(title: String, padding: PaddingValues = PaddingValues(
     }
 }
 
-/** The settings, each a row on Profile that opens its own page. */
+/**
+ * The settings, each a row on Profile that opens its own page. Related settings share a page
+ * (owner, 2026-11-11): ten pages of one short card each left most of every page blank.
+ */
 enum class SettingsPage(val icon: ImageVector) {
     ACCOUNT(Icons.Rounded.AccountCircle),
     FRIENDS(Icons.Rounded.Group),
     SOCIAL(Icons.Rounded.Shield),
     SPLIT(Icons.Rounded.CalendarMonth),
-    WORKOUTS(Icons.Rounded.FitnessCenter),
-    REMINDERS(Icons.Rounded.Notifications),
-    BACKUPS(Icons.Rounded.CloudUpload),
-    HEALTH(Icons.Rounded.FavoriteBorder),
-    APPS(Icons.Rounded.SwapHoriz),
-    APPEARANCE(Icons.Rounded.Palette),
-    HELP(Icons.AutoMirrored.Rounded.HelpOutline),
-    WHATS_NEW(Icons.Rounded.NewReleases),
-    ADVANCED(Icons.Rounded.Tune),
-    ABOUT(Icons.Rounded.Info);
+    TRAINING(Icons.Rounded.FitnessCenter),
+    DATA(Icons.Rounded.CloudUpload),
+    APP(Icons.Rounded.Tune),
+    WHATS_NEW(Icons.Rounded.NewReleases);
 
     val title: String get() = when (this) {
         ACCOUNT -> tr("Account")
         FRIENDS -> tr("Friends")
         SOCIAL -> tr("Friends and privacy")
         SPLIT -> tr("Training split")
-        WORKOUTS -> tr("Workouts")
-        REMINDERS -> tr("Reminders")
-        BACKUPS -> tr("Backups")
-        HEALTH -> tr("Health Connect")
-        APPS -> tr("Import and export")
-        APPEARANCE -> tr("Appearance")
-        HELP -> tr("Help")
+        TRAINING -> tr("Training")
+        DATA -> tr("Your data")
+        APP -> tr("App")
         WHATS_NEW -> tr("What's new")
-        ADVANCED -> tr("Advanced")
-        ABOUT -> tr("About")
     }
+
+    /** What's on the page, under its row on Profile. */
+    val contents: String? get() = when (this) {
+        SOCIAL -> tr("Notifications, blocked people, rules")
+        TRAINING -> tr("Units, rest timer, reminders")
+        DATA -> tr("Backups, Health Connect, Strong and Hevy")
+        APP -> tr("Theme, language, help, about")
+        else -> null
+    }
+
+    /** Pages made of several titled cards; the rest are one card named by the page's title. */
+    val sections: Boolean get() = this == TRAINING || this == DATA || this == APP
 }
 
 @Composable
-private fun SettingsRow(icon: ImageVector, text: String, danger: Boolean = false, onClick: () -> Unit) {
+private fun SettingsRow(icon: ImageVector, text: String, danger: Boolean = false, subtitle: String? = null, onClick: () -> Unit) {
     val P = LocalPalette.current
     Row(
         Modifier
@@ -981,14 +977,17 @@ private fun SettingsRow(icon: ImageVector, text: String, danger: Boolean = false
     ) {
         Icon(icon, null, tint = if (danger) P.dangerText else P.textSecondary, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(14.dp))
-        Text(text, style = AppType.body, color = if (danger) P.dangerText else P.textPrimary, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(text, style = AppType.body, color = if (danger) P.dangerText else P.textPrimary)
+            if (subtitle != null) Text(subtitle, style = AppType.caption, color = P.textSecondary)
+        }
         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = P.textTertiary, modifier = Modifier.size(20.dp))
     }
 }
 
 /** A settings page over Profile: back, its title, then its settings. */
 @Composable
-private fun SettingsPageScreen(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+private fun SettingsPageScreen(title: String, sections: Boolean, onBack: () -> Unit, content: @Composable () -> Unit) {
     val P = LocalPalette.current
     val backModifier = rememberPredictiveBack(onBack = onBack)
     Box(backModifier.fillMaxSize().background(P.bgPrimary)) {
@@ -1003,7 +1002,10 @@ private fun SettingsPageScreen(title: String, onBack: () -> Unit, content: @Comp
                 }
             }
             item { Text(title, style = AppType.display, color = P.textPrimary) }
-            item { CompositionLocalProvider(LocalOnSettingsPage provides true) { content() } }
+            item {
+                if (sections) Column(verticalArrangement = Arrangement.spacedBy(22.dp)) { content() }
+                else CompositionLocalProvider(LocalOnSettingsPage provides true) { content() }
+            }
         }
         StatusBarScrim()
     }

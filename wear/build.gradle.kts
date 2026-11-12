@@ -21,8 +21,8 @@ android {
         minSdk = 30
         targetSdk = 37
         // Play needs the watch APK's version code to differ from the phone's.
-        versionCode = 1_000_041
-        versionName = "1.0.0-beta.3"
+        versionCode = 1_000_042
+        versionName = "1.0.0-beta.4"
     }
 
     signingConfigs {

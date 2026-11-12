@@ -74,6 +74,14 @@ fun HomeScreen(
         else -> splits.find { it.title == activeSplitTitle } ?: WorkoutSplit(activeSplitTitle, "", "")
     }
 
+    val signedIn = Account.user?.uid
+    LaunchedEffect(signedIn) {
+        if (signedIn != null) {
+            if (Friends.myHandle == null) Friends.loadMe(context)
+            if (Friends.myHandle != null && Friends.circle == null) Friends.refresh()
+        }
+    }
+
     val listState = rememberLazyListState()
     var showRecovery by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -110,6 +118,9 @@ fun HomeScreen(
                     }
                 }
             }
+
+            // Friends where the app opens, not four tabs away (Hevy and Strava open on them).
+            if (showTodayFriends()) item(key = "friends") { TodayFriends(Modifier.enterAnimation(1)) }
 
             item { UpdateCard() }
 
@@ -267,13 +278,15 @@ private fun UpNextCard(
                 Text(daySubtitle(split), style = AppType.body, color = P.textSecondary)
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill(if (exerciseCount == 1) tr("1 exercise") else tr("{0} exercises", exerciseCount), container = P.bgControl)
+                    // The list below counts the exercises when there is one.
+                    if (plan.isEmpty()) Pill(if (exerciseCount == 1) tr("1 exercise") else tr("{0} exercises", exerciseCount), container = P.bgControl)
                     if (minutes > 0) Pill(tr("~{0} min", minutes), icon = Icons.Rounded.Schedule, container = P.bgControl)
                     Pill(
                         last?.let { tr("Last done {0}", relativeDay(it.id)) } ?: tr("Not done yet"),
                         container = P.bgControl
                     )
                 }
+                if (plan.isNotEmpty()) PlanPreview(plan)
             }
             Spacer(Modifier.height(18.dp))
             PrimaryButton(
@@ -304,6 +317,39 @@ private fun UpNextCard(
             onStartPlanned(trimmed)
         }
     }
+}
+
+/**
+ * What the day holds, as Hevy's routine cards show it: each exercise with its sets and the top set
+ * planned for today (weights from last time), so you know what you're walking into before Start.
+ */
+@Composable
+private fun PlanPreview(plan: List<ExerciseEntry>) {
+    val P = LocalPalette.current
+    val shownCount = if (plan.size <= 5) plan.size else 4
+    Spacer(Modifier.height(14.dp))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(P.borderSubtle))
+    Spacer(Modifier.height(6.dp))
+    plan.take(shownCount).forEach { ex ->
+        val work = ex.sets.filter { !it.isWarmupSet }
+        Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            ExerciseThumb(ex.name, size = 32.dp, showEmpty = true)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                tr("{0} × {1}", work.size, shown(ex.name)), style = AppType.body, color = P.textPrimary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            )
+            // The heaviest set planned: what today asks of you on this lift.
+            work.maxByOrNull { it.weightKg }?.takeIf { it.weight.isNotBlank() || it.reps.isNotBlank() || it.seconds.isNotBlank() }?.let { top ->
+                Spacer(Modifier.width(8.dp))
+                Text(formatSet(top, ex.type), style = AppType.label.copy(fontFeatureSettings = "tnum"), color = P.textSecondary, maxLines = 1)
+            }
+        }
+    }
+    if (plan.size > shownCount) Text(
+        if (plan.size - shownCount == 1) tr("1 more exercise") else tr("{0} more exercises", plan.size - shownCount),
+        style = AppType.caption, color = P.textTertiary, modifier = Modifier.padding(start = 42.dp, top = 2.dp)
+    )
 }
 
 @Composable
@@ -434,6 +480,11 @@ private fun SplitRow(
     modifier: Modifier = Modifier
 ) {
     val P = LocalPalette.current
+    val context = LocalContext.current
+    // The day's exercises by name, like a routine card: what the day is, not just what it's called.
+    val names = remember(split.title, lastDone?.id) {
+        LocalStorage.existingTemplateForSplit(context, split.title).orEmpty().joinToString(", ") { shown(it.first) }
+    }
     Row(
         modifier.fillMaxWidth().pressable(pressedScale = 0.99f, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -449,10 +500,11 @@ private fun SplitRow(
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(shown(split.title), style = AppType.bodyStrong, color = P.textPrimary)
+                if (names.isNotEmpty()) Text(names, style = AppType.caption, color = P.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     if (doneThisWeek) tr("Done this week") else lastDone?.let { tr("Last done {0}", relativeDay(it.id)) } ?: daySubtitle(split),
                     style = AppType.caption,
-                    color = if (doneThisWeek) P.successText else P.textSecondary
+                    color = if (doneThisWeek) P.successText else P.textTertiary
                 )
             }
             Icon(Icons.Rounded.PlayArrow, tr("Start {0}", shown(split.title)), tint = P.textTertiary, modifier = Modifier.size(22.dp))

@@ -17,5 +17,6 @@ class WhatsNewTest {
         assertEquals(listOf("1.0.0-beta.2", "1.0.0-beta.1"), versions("1.0.0-beta.2", null))
         assertEquals(listOf("1.0.0-beta.1"), versions("1.0.0-beta.1", "3.8.0"))
         assertEquals(listOf("1.0.0-beta.3", "1.0.0-beta.2"), versions("1.0.0-beta.3", "1.0.0-beta.1"))
+        assertEquals(listOf("1.0.0-beta.4"), versions("1.0.0-beta.4", "1.0.0-beta.3"))
     }
 }

@@ -87,6 +87,9 @@ fun ProgressScreen(
 
         item { ConsistencyCard(history, onOpenCalendar, Modifier.enterAnimation(0)) }
 
+        // Hidden until something weighted is logged: the card draws nothing then.
+        item { WeeklyVolumeCard(history, Modifier.enterAnimation(1)) }
+
         item {
             SectionHeader(
                 tr("Best lifts"),
@@ -450,7 +453,7 @@ private fun WeeklySetsCard(items: List<MuscleRecoveryItem>, modifier: Modifier =
         }
         if (none.isNotEmpty()) {
             Text(
-                tr("Not trained: ") + none.joinToString(", "),
+                tr("Not trained: ") + none.joinToString(", ") { shown(it) },
                 style = AppType.caption,
                 color = P.textTertiary,
                 modifier = Modifier.padding(top = 12.dp)
