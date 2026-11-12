@@ -656,6 +656,7 @@ internal object HebrewText {
         m["Uses your screen's highest refresh rate (120 Hz). Turn off to save battery."] = "משתמשת בקצב הרענון הגבוה ביותר של המסך (120Hz). כבו כדי לחסוך בסוללה."
         m["Vibration"] = "רטט"
         m["Volume"] = "נפח"
+        m["Duration"] = "משך"
         m["W"] = "ח"
         m["Warm-up"] = "חימום"
         m["Was {0}"] = "היה {0}"

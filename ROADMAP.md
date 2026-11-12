@@ -9,6 +9,13 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 
 ## Next up
 
+**Design polish to compete with Hevy** (owner, 2026-11-12; branch `design-hevy`, on top of `screens-fill`). One screen per step, each tested on the phone before the next. Checked after the 2026-11-12 crash: nothing was lost (only CRLF noise in `ExerciseStats.kt`), build + tests green.
+- [x] Workout screen: a live Duration · Volume (Reps when nothing is weighted) · Sets strip under the title, counting ticked work sets only; the progress bar is a thin line under the header. Set rows tighter (38 dp boxes, `SET_FIELD_HEIGHT`). A done set is all green: green tick, and the set number sits straight on the row. Checked on the emulator in Hebrew. **Not yet tested on the phone.**
+- [ ] Today: routine cards that show the day's exercises (Hevy's Routines list), not only a name.
+- [ ] History: workout cards with the top set per exercise and a muscle/volume line, like Hevy's feed cards.
+- [ ] Profile: a dashboard (workouts/volume/duration chart with a period switch) at the top.
+- [ ] A dark-mode pass over all of the above.
+
 **Screens that felt empty** (owner, 2026-11-11; branch `screens-fill`, on top of `social`; built, unit-tested (`WorkoutPagesTest`), checked on the emulator in English and Hebrew; **not yet tested on the phone**):
 - [x] Settings: ten pages of one short card each became four. Profile → Settings lists Friends and privacy, Training (during a workout + reminders), Your data (backups, Health Connect, Strong/Hevy import and CSV export), App (appearance, help, advanced, about) and What's new; each row says what's inside.
 - [x] Progress: a Weekly volume card under the streak: 12 weeks of bars (Sunday weeks, counted as History's week totals), this week in the accent, tap a bar for that week, a dashed "usual week" line (average of finished weeks with lifting). Hidden until something weighted is logged (`VolumeChart.kt`).

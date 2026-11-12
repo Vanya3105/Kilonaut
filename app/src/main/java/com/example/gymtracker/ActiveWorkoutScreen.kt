@@ -214,6 +214,14 @@ fun ActiveWorkoutScreen(
     val skipped = exercises.withIndex().filter { it.value.isSkipped }
     val totalSets = active.sumOf { it.value.sets.size }
     val doneSets = active.sumOf { ex -> ex.value.sets.count { it.isCompleted } }
+    // The header's running totals count ticked work sets only, as the finished workout will.
+    val liftsWeight = active.any { it.value.type.countsVolume }
+    val liveTotal = active.sumOf { iv ->
+        val ex = iv.value
+        val done = ex.sets.filter { it.isCompleted && !it.isWarmupSet }
+        if (liftsWeight) { if (ex.type.countsVolume) done.sumOf { (it.weightKg * it.repCount).toDouble() } else 0.0 }
+        else if (ex.type.usesReps) done.sumOf { it.repCount.toDouble() } else 0.0
+    }.roundToInt()
     // Quick workouts differ every time, so the last one is no template.
     val previousSplitWorkout = remember(split.title, history) {
         if (split.title == QUICK_WORKOUT_TITLE) null
@@ -343,6 +351,8 @@ fun ActiveWorkoutScreen(
                 startTimeMillis = startTimeMillis,
                 doneSets = doneSets,
                 totalSets = totalSets,
+                liftsWeight = liftsWeight,
+                liveTotal = liveTotal,
                 onClose = {
                     if (isEditingPastWorkout && hasUnsavedEdits) confirmDiscard = true
                     else if (isEditingPastWorkout) onDiscardWorkout()
@@ -777,6 +787,9 @@ private fun WorkoutTopBar(
     startTimeMillis: Long,
     doneSets: Int,
     totalSets: Int,
+    /** Volume in kg when anything is lifted with weight, otherwise reps. */
+    liftsWeight: Boolean,
+    liveTotal: Int,
     onClose: () -> Unit,
     onFinish: () -> Unit,
     onDiscard: () -> Unit,
@@ -785,7 +798,7 @@ private fun WorkoutTopBar(
     val P = LocalPalette.current
     var menuOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(P.bgPrimary).statusBarsPadding()) {
-        Row(Modifier.padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             CircleIconButton(
                 if (isEditing) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.KeyboardArrowDown,
                 if (isEditing) tr("Back") else tr("Minimize workout"),
@@ -796,7 +809,6 @@ private fun WorkoutTopBar(
             Column(Modifier.weight(1f)) {
                 Text(title, style = AppType.title, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (isEditing) Text(tr("Editing a logged workout"), style = AppType.caption, color = P.textSecondary)
-                else ElapsedClock(startTimeMillis)
             }
             PrimaryButton(if (isEditing) tr("Save") else tr("Finish"), onFinish, finishModifier, height = 40.dp)
             Box {
@@ -810,16 +822,39 @@ private fun WorkoutTopBar(
                 }
             }
         }
-        Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            AnimatedProgressBar(
-                progress = if (totalSets == 0) 0f else doneSets / totalSets.toFloat(),
-                modifier = Modifier.weight(1f),
-                height = 5.dp
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(tr("{0} of {1} sets", doneSets, totalSets), style = AppType.caption.copy(fontFeatureSettings = "tnum"), color = P.textSecondary)
+        // Running totals, readable at a glance between sets.
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 10.dp)) {
+            if (!isEditing) LiveStat(tr("Duration"), Modifier.weight(1f)) { ElapsedClock(startTimeMillis) }
+            LiveStat(if (liftsWeight) tr("Volume") else tr("Reps"), Modifier.weight(1f)) {
+                LiveNumber(if (liftsWeight) formatVolume(liveTotal) else "$liveTotal")
+            }
+            LiveStat(tr("Sets"), Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    LiveNumber("$doneSets")
+                    Text("/$totalSets", style = AppType.label.copy(fontFeatureSettings = "tnum"), color = P.textTertiary, modifier = Modifier.padding(bottom = 1.dp))
+                }
+            }
         }
+        AnimatedProgressBar(
+            progress = if (totalSets == 0) 0f else doneSets / totalSets.toFloat(),
+            modifier = Modifier.fillMaxWidth(),
+            height = 2.dp
+        )
     }
+}
+
+@Composable
+private fun LiveStat(label: String, modifier: Modifier, value: @Composable () -> Unit) {
+    val P = LocalPalette.current
+    Column(modifier) {
+        Text(label, style = AppType.caption, color = P.textSecondary)
+        value()
+    }
+}
+
+@Composable
+private fun LiveNumber(text: String, color: Color = LocalPalette.current.textPrimary) {
+    Text(text, style = AppType.headline.copy(fontFeatureSettings = "tnum"), color = color, maxLines = 1)
 }
 
 @Composable
@@ -832,7 +867,7 @@ private fun ElapsedClock(startTimeMillis: Long) {
             elapsed = ((System.currentTimeMillis() - startTimeMillis) / 1000L).coerceAtLeast(0L)
         }
     }
-    Text(formatClock(elapsed), style = AppType.caption.copy(fontFeatureSettings = "tnum"), color = P.textSecondary)
+    LiveNumber(formatClock(elapsed), P.accentPrimary)
 }
 
 // ============================================================================
@@ -1274,24 +1309,24 @@ private fun SetRow(
         set.isWarmupSet -> Triple(tr("W"), P.warningText, P.warningSurface)
         set.intensityType == "DROP" -> Triple(tr("D"), P.dangerText, P.dangerSurface)
         set.intensityType == "REST_PAUSE" -> Triple(tr("RP"), P.textSecondary, P.bgControl)
-        else -> Triple("$workNumber", P.textPrimary, P.bgControl)
+        else -> Triple("$workNumber", P.textPrimary, if (set.isCompleted) Color.Transparent else P.bgControl)
     }
 
     Row(
         rowModifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 2.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(rowBg)
             .border(1.5.dp, rowBorder, RoundedCornerShape(12.dp))
-            .padding(vertical = 4.dp),
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(badgeModifier.width(40.dp)) {
             Box(
                 Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(9.dp))
                     .background(badgeBg)
                     .pressable(pressedScale = 0.88f) { haptics.tick(); menuOpen = true },
                 contentAlignment = Alignment.Center
@@ -1367,7 +1402,7 @@ private fun PreviousCell(previous: SetEntry?, type: ExerciseType, modifier: Modi
     Box(
         modifier
             .width(PREVIOUS_WIDTH)
-            .height(40.dp)
+            .height(SET_FIELD_HEIGHT)
             .clip(RoundedCornerShape(10.dp))
             .then(if (previous != null) Modifier.pressable(pressedScale = 0.92f) { onCopy(previous) } else Modifier),
         contentAlignment = Alignment.Center
@@ -1386,8 +1421,9 @@ private fun PreviousCell(previous: SetEntry?, type: ExerciseType, modifier: Modi
 @Composable
 private fun CheckButton(done: Boolean, onClick: () -> Unit) {
     val P = LocalPalette.current
-    val bg by animateColorAsState(if (done) P.accentPrimary else P.bgControl, tween(200), label = "check_bg")
-    val fg by animateColorAsState(if (done) P.onAccentPrimary else P.textTertiary, tween(200), label = "check_fg")
+    // Done is green, like its row: an orange tick on a green row read as two different meanings.
+    val bg by animateColorAsState(if (done) P.successText else P.bgControl, tween(200), label = "check_bg")
+    val fg by animateColorAsState(if (done) P.bgCard else P.textTertiary, tween(200), label = "check_fg")
     val pop = remember { Animatable(1f) }
     var previous by remember { mutableStateOf(done) }
     LaunchedEffect(done) {
@@ -1400,7 +1436,7 @@ private fun CheckButton(done: Boolean, onClick: () -> Unit) {
     }
     Box(
         Modifier
-            .size(44.dp, 40.dp)
+            .size(44.dp, SET_FIELD_HEIGHT)
             .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
             .clip(RoundedCornerShape(12.dp))
             .background(bg)

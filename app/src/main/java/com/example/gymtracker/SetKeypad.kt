@@ -184,6 +184,9 @@ val LocalSetEditor = staticCompositionLocalOf<SetEditor?> { null }
 
 /** A set value as plain text; tap to type into it. Outlined while the keypad edits it. */
 @OptIn(ExperimentalFoundationApi::class)
+/** Height of a set row's boxes: compact enough to see a whole exercise, still a big thumb target. */
+val SET_FIELD_HEIGHT = 38.dp
+
 @Composable
 fun SetValueBox(ref: FieldRef, set: SetEntry, type: ExerciseType, modifier: Modifier = Modifier) {
     val P = LocalPalette.current
@@ -202,7 +205,7 @@ fun SetValueBox(ref: FieldRef, set: SetEntry, type: ExerciseType, modifier: Modi
     if (editing) LaunchedEffect(ref) { delay(260); bring.bringIntoView() }
     Box(
         modifier
-            .height(40.dp)
+            .height(SET_FIELD_HEIGHT)
             .bringIntoViewRequester(bring)
             .clip(shape)
             .background(fill)
