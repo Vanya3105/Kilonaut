@@ -42,6 +42,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Constraints
+import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,10 +86,36 @@ fun HistoryScreen(
         listOf(TutorialStepInfo("CARD", tr("Your workouts"), tr("Tap a workout to see or edit every set. ⋮ shares it as an image or deletes it. Swipe sideways for other weeks."))),
         ready = history.isNotEmpty()
     )
+    // The title, calendar and Week | Month slide away as the workouts scroll up and come back on the
+    // way down: fixed, they took over half the screen and left room for one card.
+    var headerHeight by remember { mutableIntStateOf(0) }
+    var headerOffset by remember { mutableFloatStateOf(0f) }
+    val collapse = remember {
+        object : NestedScrollConnection {
+            fun move(dy: Float): Offset {
+                val old = headerOffset
+                headerOffset = (old + dy).coerceIn(-headerHeight.toFloat(), 0f)
+                return Offset(0f, headerOffset - old)
+            }
+            // Up: the header goes first. Down: the list comes back to its top first, then the header.
+            override fun onPreScroll(available: Offset, source: NestedScrollSource) = if (available.y < 0f) move(available.y) else Offset.Zero
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = if (available.y > 0f) move(available.y) else Offset.Zero
+        }
+    }
     Box(Modifier.fillMaxSize()) {
     CompositionLocalProvider(LocalHistoryIndex provides byExercise, LocalHistoryTip provides tour) {
-    Column(Modifier.fillMaxSize()) {
-        Column(Modifier.statusBarsPadding().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp)) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().nestedScroll(collapse)) {
+        Column(
+            Modifier
+                .clipToBounds()
+                .layout { measurable, constraints ->
+                    val p = measurable.measure(constraints.copy(maxHeight = Constraints.Infinity))
+                    val off = headerOffset.roundToInt().coerceIn(-p.height, 0)
+                    layout(p.width, p.height + off) { p.place(0, off) }
+                }
+                .onSizeChanged { headerHeight = it.height }
+                .padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp)
+        ) {
             Text(tr("History"), style = AppType.display, color = P.textPrimary)
             Spacer(Modifier.height(14.dp))
             // One calendar, one place: six months at a glance; a day opens in the month below.

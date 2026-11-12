@@ -453,7 +453,7 @@ private fun WeeklySetsCard(items: List<MuscleRecoveryItem>, modifier: Modifier =
         }
         if (none.isNotEmpty()) {
             Text(
-                tr("Not trained: ") + none.joinToString(", "),
+                tr("Not trained: ") + none.joinToString(", ") { shown(it) },
                 style = AppType.caption,
                 color = P.textTertiary,
                 modifier = Modifier.padding(top = 12.dp)

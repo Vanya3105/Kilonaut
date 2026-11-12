@@ -138,7 +138,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true, onTryWor
         FeedTopBar(
             onPosts = false,
             canPost = Feed.demo || (user != null && handle != null),
-            // The bell is what's new for you; finding people has its own button, one tap from the feed.
+            // The bell is what's new for you; friends (list, requests, adding) have their own button.
             onFriends = { if (social) activityOpen = true else friendsOpen = true },
             onFindFriends = { friendsOpen = true },
             onNewPost = { composing = ComposeStart(null) },
@@ -231,10 +231,17 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
                 Spacer(Modifier.width(10.dp))
             }
             if (onFindFriends != null) {
-                Box(
-                    Modifier.size(42.dp).clip(CircleShape).background(if (onPosts) White.copy(alpha = 0.18f) else P.bgControl).pressable(onClick = onFindFriends),
-                    contentAlignment = Alignment.Center
-                ) { Icon(Icons.Rounded.PersonAdd, tr("Find friends"), tint = ink, modifier = Modifier.size(22.dp)) }
+                // Friends live here, next to their workouts: your list, requests, and adding someone.
+                Box {
+                    Box(
+                        Modifier.size(42.dp).clip(CircleShape).background(if (onPosts) White.copy(alpha = 0.18f) else P.bgControl).pressable(onClick = onFindFriends),
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Rounded.Group, tr("Friends"), tint = ink, modifier = Modifier.size(22.dp)) }
+                    if (Friends.requestCount > 0) Box(
+                        Modifier.align(Alignment.TopEnd).size(11.dp).clip(CircleShape).background(P.accentPrimary)
+                            .border(2.dp, if (onPosts) Scrim else P.bgPrimary, CircleShape)
+                    )
+                }
                 Spacer(Modifier.width(10.dp))
             }
             Box {
@@ -242,7 +249,7 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
                     Modifier.size(42.dp).clip(CircleShape).background(if (onPosts) White.copy(alpha = 0.18f) else P.bgControl).pressable(onClick = onFriends),
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Rounded.Notifications, tr("Activity"), tint = ink, modifier = Modifier.size(22.dp)) }
-                if (Friends.requestCount > 0 || ActivityLog.unread > 0) Box(
+                if ((onFindFriends == null && Friends.requestCount > 0) || ActivityLog.unread > 0) Box(
                     Modifier.align(Alignment.TopEnd).size(11.dp).clip(CircleShape).background(P.accentPrimary)
                         .border(2.dp, if (onPosts) Scrim else P.bgPrimary, CircleShape)
                 )

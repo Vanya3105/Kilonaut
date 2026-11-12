@@ -69,7 +69,7 @@ object WhatsNew {
     internal fun notesFor(version: String): List<Item> = when (version) {
         "1.0.0-beta.4" -> listOf(
             Item(Icons.Rounded.Timer, tr("A workout screen that keeps count"), tr("Time, volume and sets count up under the title as you train. Set rows are tighter, and a done set turns green.")),
-            Item(Icons.Rounded.Group, tr("Friends up front"), tr("Feed is now the second tab, a list of cards with each workout in full. Today shows who trained lately: tap a face for their page.")),
+            Item(Icons.Rounded.Group, tr("Friends up front"), tr("Feed is now the second tab, with your friends one tap away at the top. Today shows who trained lately: tap a face for their page.")),
             Item(Icons.Rounded.Checklist, tr("Know the day before you start"), tr("Up next lists every exercise with its sets and today's top weight. The other days name their exercises.")),
             Item(Icons.Rounded.Event, tr("History at a glance"), tr("Each workout shows its time, volume and sets, every exercise with its picture and best set, and the muscles you trained.")),
             Item(Icons.Rounded.BarChart, tr("Your training on Profile"), tr("A chart of your time, volume or workouts, by week or by month. Tap a bar to see its number.")),

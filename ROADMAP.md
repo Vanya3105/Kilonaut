@@ -18,6 +18,11 @@ Goal: make GymTracker comparable to Strong / Hevy / JEFIT while staying offline-
 - [x] Dark-mode pass over all of the above, on the emulator in Hebrew (workout, Today, Feed, History, Profile): chart bars that aren't picked are a quiet grey on dark (see-through orange turned brown), in the dashboard and Progress's weekly volume; a long exercise name on a History card no longer runs into its best set (both themes). **Not yet tested on the phone.**
 - [x] What's new for **1.0.0 beta 4** (owner's request): version 42 (watch 1_000_042), notes for everything since beta 3: the workout screen, friends up front, Today's day preview, History cards, Profile chart, the workout page, weekly volume, four settings pages, the import fix. Not published: the owner tests `design-hevy` on the phone first, then merge `screens-fill` + `design-hevy` and release.
 
+**Final tweaks before pushing** (owner, 2026-11-12; on `design-hevy`; **not yet tested on the phone**):
+- [x] Friends live on the Feed: its top bar has a Friends button (people icon, a dot for friend requests) that opens the list, requests and Add friend; Profile's Friends card is gone (notifications and blocked people stay in Settings → Friends and privacy). The bell's dot is for new activity only.
+- [x] History: the title, training-days grid and Week | Month slide away as the workouts scroll and come back on the way down (they took over half the screen); the week bar and totals stay.
+- [x] Progress: "Not trained: Calves, Core" shows the muscles in the app's language.
+
 **Screens that felt empty** (owner, 2026-11-11; branch `screens-fill`, on top of `social`; built, unit-tested (`WorkoutPagesTest`), checked on the emulator in English and Hebrew; **not yet tested on the phone**):
 - [x] Settings: ten pages of one short card each became four. Profile → Settings lists Friends and privacy, Training (during a workout + reminders), Your data (backups, Health Connect, Strong/Hevy import and CSV export), App (appearance, help, advanced, about) and What's new; each row says what's inside.
 - [x] Progress: a Weekly volume card under the streak: 12 weeks of bars (Sunday weeks, counted as History's week totals), this week in the accent, tap a bar for that week, a dashed "usual week" line (average of finished weeks with lifting). Hidden until something weighted is logged (`VolumeChart.kt`).

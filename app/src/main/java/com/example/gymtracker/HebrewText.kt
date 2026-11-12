@@ -619,7 +619,7 @@ internal object HebrewText {
         m["A workout screen that keeps count"] = "מסך אימון שסופר בשבילכם"
         m["Time, volume and sets count up under the title as you train. Set rows are tighter, and a done set turns green."] = "הזמן, הנפח והסטים מתעדכנים מתחת לכותרת תוך כדי אימון. שורות הסטים צפופות יותר, וסט שסיימתם נצבע בירוק."
         m["Friends up front"] = "החברים קרובים יותר"
-        m["Feed is now the second tab, a list of cards with each workout in full. Today shows who trained lately: tap a face for their page."] = "הפיד הוא עכשיו הלשונית השנייה: רשימת כרטיסים, כל אימון במלואו. במסך היום רואים מי התאמן לאחרונה, והקשה על תמונה פותחת את הדף שלו."
+        m["Feed is now the second tab, with your friends one tap away at the top. Today shows who trained lately: tap a face for their page."] = "הפיד הוא עכשיו הלשונית השנייה, והחברים במרחק הקשה אחת בראש שלו. במסך היום רואים מי התאמן לאחרונה, והקשה על תמונה פותחת את הדף שלו."
         m["Know the day before you start"] = "יודעים מה מחכה לפני שמתחילים"
         m["Up next lists every exercise with its sets and today's top weight. The other days name their exercises."] = "הבא בתור מציג כל תרגיל עם הסטים שלו והמשקל הגבוה של היום. גם בשאר הימים רואים את שמות התרגילים."
         m["History at a glance"] = "היסטוריה במבט אחד"

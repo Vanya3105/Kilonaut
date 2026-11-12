@@ -380,7 +380,6 @@ fun SettingsScreen(
 
         item { ProfileDashboard(history) }
 
-        if (Account.available(context)) item { FriendsCard(onOpen = { page = SettingsPage.FRIENDS }) }
 
         item {
             SettingsGroup(tr("Your training")) {
