@@ -64,6 +64,31 @@ class WorkoutPagesTest {
     }
 
     @Test
+    fun activity_byWeekAndByMonth_countsWorkoutsTimeAndVolume() {
+        val history = listOf(
+            workout(daysAgo(0), "Push", bench(set("100", "5"))),  // this week, this month
+            workout(daysAgo(4), "Push", bench(set("50", "10"))),  // Sat 7 Nov: last week, this month
+            workout(daysAgo(15), "Push", bench(set("60", "10"))), // 27 Oct: last month
+            workout(daysAgo(800), "Push", bench(set("60", "10"))) // before both charts
+        )
+        val weeks = activityBuckets(history, byMonth = false, nowMillis = now)
+        assertEquals(ACTIVITY_BARS, weeks.size)
+        assertEquals(1, weeks.last().workouts)
+        assertEquals(500, weeks.last().volumeKg)
+        assertEquals(3600L, weeks.last().seconds)
+        assertEquals(1, weeks[weeks.lastIndex - 1].workouts)
+        assertEquals(3, weeks.sumOf { it.workouts })
+
+        val months = activityBuckets(history, byMonth = true, nowMillis = now)
+        assertEquals(2, months.last().workouts)
+        assertEquals(1000, months.last().volumeKg)
+        assertEquals(1, months[months.lastIndex - 1].workouts)
+        val first = Calendar.getInstance().apply { timeInMillis = months.first().startMillis }
+        assertEquals(1, first.get(Calendar.DAY_OF_MONTH))
+        assertEquals(Calendar.DECEMBER, first.get(Calendar.MONTH))
+    }
+
+    @Test
     fun summary_firstTimeHasNothingToCompare() {
         val first = workout(1, "Push", bench(set("90", "5")))
         val s = summarizeWorkout(first, listOf(first))

@@ -378,6 +378,8 @@ fun SettingsScreen(
 
         item { ProfileStats(history, programFor(userProfile.splitProgram).weeklyGoal) }
 
+        item { ProfileDashboard(history) }
+
         if (Account.available(context)) item { FriendsCard(onOpen = { page = SettingsPage.FRIENDS }) }
 
         item {

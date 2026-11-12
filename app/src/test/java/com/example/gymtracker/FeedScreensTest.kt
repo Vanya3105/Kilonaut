@@ -159,6 +159,33 @@ class FeedScreensTest {
         save(name)
     }
 
+    /** Profile's dashboard over a few months of made-up training. */
+    private fun drawDashboard(name: String, palette: GymPalette) {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        val day = 24 * 3_600_000L
+        val now = System.currentTimeMillis()
+        val history = (0 until 40).map { i ->
+            val at = now - (i * 2.3 * day).toLong()
+            CompletedWorkout(
+                id = at, splitTitle = "Push", dateKey = "", displayDate = "", durationSeconds = 2400L + (i % 5) * 600L,
+                bodyWeightKg = 80f, photoPath = null, skippedExercises = emptyList(),
+                exercises = listOf(ExerciseEntry("Barbell Bench Press", "Chest", sets = List(3 + i % 3) { SetEntry(setNumber = it + 1, weight = "${60 + i % 4 * 5}", reps = "8", isCompleted = true) })),
+                totalVolumeKg = 1
+            )
+        }
+        compose.setContent {
+            GymTheme(palette) {
+                Box(Modifier.fillMaxSize().background(palette.bgPrimary).padding(16.dp)) { ProfileDashboard(history) }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.waitForIdle()
+        save(name)
+    }
+
+    @Test fun dashboard() = drawDashboard("11-dashboard", LightPalette)
+    @Test fun dashboardDark() = drawDashboard("11-dashboard-dark", DarkPalette)
+
     @Test fun historyCard() = drawHistoryCard("10-history-card", LightPalette)
     @Test fun historyCardDark() = drawHistoryCard("10-history-card-dark", DarkPalette)
 
