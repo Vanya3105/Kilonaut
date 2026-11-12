@@ -10,6 +10,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -97,6 +99,42 @@ class FeedScreensTest {
     @Test fun textOnly() = draw("3-text", 2)
     @Test fun midSwipe() = draw("4-swipe", 0, 0.35f)
     @Test fun caughtUp() = draw("5-end", 3)
+
+    private fun drawCards(name: String, palette: GymPalette) {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        val list = posts()
+        compose.setContent {
+            GymTheme(palette) {
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(palette.bgPrimary)) {
+                    FeedTopBar(onPosts = false, canPost = true, onFriends = {}, onNewPost = {}, onMe = {}, onFindFriends = {})
+                    FeedList(list, listOf(maya, dan, noa).associateBy { it.uid }, onFriends = {}, onNewPost = {}, onOpenPerson = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        save(name)
+    }
+
+    /** Today's friends row with the sample feed's people (Maya trained today: accent ring). */
+    @Test
+    fun todayFriends() {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        Feed.showDemo()
+        compose.setContent {
+            GymTheme(LightPalette) {
+                Box(Modifier.fillMaxSize().background(LightPalette.bgPrimary)) {
+                    TodayFriends(Modifier.padding(20.dp))
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        save("9-today-friends")
+    }
+
+    @Test fun cards() = drawCards("8-cards", LightPalette)
+    @Test fun cardsDark() = drawCards("8-cards-dark", DarkPalette)
 
     /** The sample feed's first post with its comments open: threads, likes on comments, quick reactions. */
     @Test

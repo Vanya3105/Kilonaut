@@ -130,24 +130,27 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true, onTryWor
     val tryWorkout: ((CompletedWorkout) -> Unit)? = onTryWorkout?.let { start ->
         { w: CompletedWorkout -> openPost = null; person = null; activityOpen = false; start(w) }
     }
-    val showingPosts = (Feed.demo || (user != null && handle != null && CommunityRules.agreed == true)) && !posts.isNullOrEmpty()
-    SideEffect { Feed.fullBleed = showingPosts }
     val debuggable = remember { (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
-
-    // Posts are dark pages: light status-bar icons over them, the theme's own everywhere else.
-    val view = LocalView.current
-    if (active && showingPosts) DisposableEffect(Unit) {
-        val window = (view.context as? Activity)?.window
-        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-        val before = controller?.isAppearanceLightStatusBars
-        controller?.isAppearanceLightStatusBars = false
-        onDispose { if (before != null) controller.isAppearanceLightStatusBars = before }
-    }
+    val social = user != null && handle != null && !Feed.demo
 
     CompositionLocalProvider(LocalTryWorkout provides tryWorkout) {
-    Box(Modifier.fillMaxSize().background(if (showingPosts) Scrim else P.bgPrimary)) {
+    Column(Modifier.fillMaxSize().background(P.bgPrimary)) {
+        FeedTopBar(
+            onPosts = false,
+            canPost = Feed.demo || (user != null && handle != null),
+            // The bell is what's new for you; finding people has its own button, one tap from the feed.
+            onFriends = { if (social) activityOpen = true else friendsOpen = true },
+            onFindFriends = { friendsOpen = true },
+            onNewPost = { composing = ComposeStart(null) },
+            onTitleLongPress = if (debuggable) ({ Feed.showDemo() }) else null,
+            onMe = if (Feed.demo || (user != null && handle != null)) ({
+                person = if (Feed.demo) Friends.Person("demo-me", user?.name.orEmpty(), handle ?: "you")
+                else Friends.meAsPerson() ?: Friends.Person(user!!.uid, user.name.orEmpty(), handle.orEmpty())
+            }) else null
+        )
+        Box(Modifier.weight(1f)) {
         when {
-            Feed.demo && !posts.isNullOrEmpty() -> FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
+            Feed.demo && !posts.isNullOrEmpty() -> FeedList(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
             user == null -> FeedEmpty(Icons.Rounded.Group, tr("Your friends' training"), tr("Sign in and add friends to see their workouts here, and share yours.")) {
                 PrimaryButton(tr("Sign in"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
@@ -155,7 +158,7 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true, onTryWor
                 PrimaryButton(tr("Pick a username"), { friendsOpen = true }, Modifier.fillMaxWidth())
             }
             CommunityRules.agreed == false -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                CommunityRulesGate(Modifier.statusBarsPadding().padding(top = 70.dp))
+                CommunityRulesGate(Modifier.padding(top = 8.dp))
             }
             posts == null && Feed.failed && !Feed.loading -> FeedEmpty(Icons.Rounded.CloudOff, tr("Couldn't load the feed"), tr("Check your connection and try again.")) {
                 PrimaryButton(tr("Try again"), { scope.launch { Feed.refresh(context) } }, Modifier.fillMaxWidth())
@@ -174,20 +177,10 @@ fun FeedScreen(history: List<CompletedWorkout>, active: Boolean = true, onTryWor
                 onRefresh = { scope.launch { Feed.refresh(context) } },
                 modifier = Modifier.fillMaxSize()
             ) {
-                FeedPager(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
+                FeedList(posts, Feed.people, onFriends = { friendsOpen = true }, onNewPost = { composing = ComposeStart(null) }, onOpenPerson = { person = it })
             }
         }
-        FeedTopBar(
-            onPosts = showingPosts,
-            canPost = Feed.demo || (user != null && handle != null),
-            onFriends = { if (user != null && handle != null && !Feed.demo) activityOpen = true else friendsOpen = true },
-            onNewPost = { composing = ComposeStart(null) },
-            onTitleLongPress = if (debuggable) ({ Feed.showDemo() }) else null,
-            onMe = if (Feed.demo || (user != null && handle != null)) ({
-                person = if (Feed.demo) Friends.Person("demo-me", user?.name.orEmpty(), handle ?: "you")
-                else Friends.meAsPerson() ?: Friends.Person(user!!.uid, user.name.orEmpty(), handle.orEmpty())
-            }) else null
-        )
+        }
     }
     if (activityOpen) ActivityPage(
         onClose = { activityOpen = false },
@@ -210,7 +203,7 @@ internal val LocalTryWorkout = staticCompositionLocalOf<((CompletedWorkout) -> U
 
 /** "Feed" with Friends and New post, floating over the pages (white on photos, the theme's colours otherwise). */
 @Composable
-internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Unit, onNewPost: () -> Unit, onTitleLongPress: (() -> Unit)? = null, onMe: (() -> Unit)? = null) {
+internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Unit, onNewPost: () -> Unit, onTitleLongPress: (() -> Unit)? = null, onMe: (() -> Unit)? = null, onFindFriends: (() -> Unit)? = null) {
     val P = LocalPalette.current
     val ink = if (onPosts) White else P.textPrimary
     Box(Modifier.fillMaxWidth()) {
@@ -235,6 +228,13 @@ internal fun FeedTopBar(onPosts: Boolean, canPost: Boolean, onFriends: () -> Uni
                 ) {
                     PersonAvatar(Friends.Person(Feed.me() ?: "demo-me", (Friends.myName ?: Account.user?.name).orEmpty(), Friends.myHandle.orEmpty()), 36.dp, image = ProfilePhoto.mine)
                 }
+                Spacer(Modifier.width(10.dp))
+            }
+            if (onFindFriends != null) {
+                Box(
+                    Modifier.size(42.dp).clip(CircleShape).background(if (onPosts) White.copy(alpha = 0.18f) else P.bgControl).pressable(onClick = onFindFriends),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Rounded.PersonAdd, tr("Find friends"), tint = ink, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.width(10.dp))
             }
             Box {
@@ -307,25 +307,7 @@ internal fun FeedPager(
         val live = Feed.posts?.firstOrNull { it.id == p.id && it.author.uid == p.author.uid } ?: p
         CommentsSheet(live, people, onDismiss = { commentsFor = null }, onPerson = { commentsFor = null; onOpenPerson(it) })
     }
-    workoutOf?.workout?.let { w ->
-        val tryIt = LocalTryWorkout.current
-        AppBottomSheet(onDismiss = { workoutOf = null }) {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                Text(workoutOf?.author?.title().orEmpty(), style = AppType.caption, color = LocalPalette.current.textSecondary, modifier = Modifier.padding(horizontal = 28.dp))
-                Spacer(Modifier.height(6.dp))
-                WorkoutBlock(w, full = true)
-                if (tryIt != null && w.exercises.isNotEmpty()) {
-                    // Hevy's "copy this workout": the same exercises and set counts, with your own numbers.
-                    Spacer(Modifier.height(14.dp))
-                    PrimaryButton(tr("Do this workout"), { val by = workoutOf?.author; workoutOf = null; tryIt(postAsWorkout(w, from = by?.takeIf { !it.isMeOrDemo() }?.let { it.name.substringBefore(' ').ifBlank { it.handle } })) }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), icon = Icons.Rounded.PlayArrow)
-                    Text(
-                        tr("Same exercises and sets, with weights from your own training."), style = AppType.caption, color = LocalPalette.current.textTertiary,
-                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
-                    )
-                }
-            }
-        }
-    }
+    workoutOf?.let { PostWorkoutSheet(it, onDismiss = { workoutOf = null }) }
 }
 
 /** A bouncing chevron while you're on the first post. */
@@ -460,11 +442,6 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val liked = post.likedByMe()
-    var menu by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    var reporting by remember { mutableStateOf<ReportTarget?>(null) }
-    var blocking by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf(false) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(Modifier.clip(CircleShape).border(2.dp, White, CircleShape).padding(2.dp).clip(CircleShape).pressable(onClick = onPerson)) { PersonAvatar(post.author, 44.dp) }
 
@@ -489,19 +466,33 @@ private fun Rail(post: Feed.Post, modifier: Modifier, onLike: (Boolean) -> Unit,
                 .putExtra(android.content.Intent.EXTRA_TEXT, postShareText(post, appShareLink(context)))
             runCatching { context.startActivity(android.content.Intent.createChooser(send, tr("Share"))) }
         }
-        Box {
-            RailButton(icon = Icons.Rounded.MoreHoriz, tint = White, label = null, description = tr("More")) { menu = true }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
-                if (post.mine || post.author.uid == "demo-me") {
-                    DropdownMenuItem(text = { Text(tr("Edit caption"), style = AppType.body) }, onClick = { menu = false; editing = true })
-                    DropdownMenuItem(text = { Text(tr("Delete post"), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; confirmDelete = true })
-                } else {
-                    DropdownMenuItem(text = { Text(tr("Report post"), style = AppType.body) }, onClick = {
-                        menu = false
-                        reporting = ReportTarget(post.author, Feed.pathOf(post), excerpt = post.text)
-                    })
-                    DropdownMenuItem(text = { Text(tr("Block {0}", post.author.title()), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; blocking = true })
-                }
+        PostMoreButton(post) { open -> RailButton(icon = Icons.Rounded.MoreHoriz, tint = White, label = null, description = tr("More"), onClick = open) }
+    }
+}
+
+/** ⋯ on a post: Edit caption / Delete on your own, Report / Block on others'. [button] opens it. */
+@Composable
+internal fun PostMoreButton(post: Feed.Post, button: @Composable (open: () -> Unit) -> Unit) {
+    val P = LocalPalette.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<ReportTarget?>(null) }
+    var blocking by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    Box {
+        button { menu = true }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = P.bgElevated) {
+            if (post.mine || post.author.uid == "demo-me") {
+                DropdownMenuItem(text = { Text(tr("Edit caption"), style = AppType.body) }, onClick = { menu = false; editing = true })
+                DropdownMenuItem(text = { Text(tr("Delete post"), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; confirmDelete = true })
+            } else {
+                DropdownMenuItem(text = { Text(tr("Report post"), style = AppType.body) }, onClick = {
+                    menu = false
+                    reporting = ReportTarget(post.author, Feed.pathOf(post), excerpt = post.text)
+                })
+                DropdownMenuItem(text = { Text(tr("Block {0}", post.author.title()), style = AppType.body, color = P.dangerText) }, onClick = { menu = false; blocking = true })
             }
         }
     }
@@ -755,7 +746,7 @@ private val QUICK = listOf("💪", "🔥", "👏", "🙌", "🏆", "😮", "😂
 
 /** Comments from the bottom, like TikTok's: threads with likes, then quick reactions and a box to add one. */
 @Composable
-private fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, onDismiss: () -> Unit, onPerson: (Friends.Person) -> Unit) {
+internal fun CommentsSheet(post: Feed.Post, people: Map<String, Friends.Person>, onDismiss: () -> Unit, onPerson: (Friends.Person) -> Unit) {
     val P = LocalPalette.current
     val scope = rememberCoroutineScope()
     val haptics = rememberFeedHaptics()
@@ -1106,3 +1097,26 @@ fun PostViewer(owner: String, id: String, onClose: () -> Unit, onPerson: (Friend
 }
 
 private fun Friends.Person.isMeOrDemo() = uid == Feed.me() || uid == "demo-me"
+
+/** A post's whole workout in a sheet, with Do this workout. */
+@Composable
+internal fun PostWorkoutSheet(post: Feed.Post, onDismiss: () -> Unit) {
+    val w = post.workout ?: return
+    val tryIt = LocalTryWorkout.current
+    AppBottomSheet(onDismiss = onDismiss) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+            Text(post.author.title(), style = AppType.caption, color = LocalPalette.current.textSecondary, modifier = Modifier.padding(horizontal = 28.dp))
+            Spacer(Modifier.height(6.dp))
+            WorkoutBlock(w, full = true)
+            if (tryIt != null && w.exercises.isNotEmpty()) {
+                // Hevy's "copy this workout": the same exercises and set counts, with your own numbers.
+                Spacer(Modifier.height(14.dp))
+                PrimaryButton(tr("Do this workout"), { val by = post.author; onDismiss(); tryIt(postAsWorkout(w, from = by.takeIf { !it.isMeOrDemo() }?.let { it.name.substringBefore(' ').ifBlank { it.handle } })) }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), icon = Icons.Rounded.PlayArrow)
+                Text(
+                    tr("Same exercises and sets, with weights from your own training."), style = AppType.caption, color = LocalPalette.current.textTertiary,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+}

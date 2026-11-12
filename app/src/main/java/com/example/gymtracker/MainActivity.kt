@@ -212,9 +212,10 @@ class Haptics(private val enabled: Boolean, private val view: android.view.View)
 /** [icon] is shown when selected, [idleIcon] (outlined) otherwise. */
 enum class AppTab(val label: String, val icon: ImageVector, val idleIcon: ImageVector) {
     TODAY(tr("Today"), AppIcons.TodayFilled, AppIcons.Today),
+    // Friends next to home, as Hevy and Strava put them, not four tabs away.
+    FEED(tr("Feed"), AppIcons.FeedFilled, AppIcons.Feed),
     HISTORY(tr("History"), AppIcons.HistoryFilled, AppIcons.History),
     PROGRESS(tr("Progress"), AppIcons.ProgressFilled, AppIcons.Progress),
-    FEED(tr("Feed"), AppIcons.FeedFilled, AppIcons.Feed),
     PROFILE(tr("Profile"), AppIcons.ProfileFilled, AppIcons.Profile)
 }
 

@@ -74,6 +74,14 @@ fun HomeScreen(
         else -> splits.find { it.title == activeSplitTitle } ?: WorkoutSplit(activeSplitTitle, "", "")
     }
 
+    val signedIn = Account.user?.uid
+    LaunchedEffect(signedIn) {
+        if (signedIn != null) {
+            if (Friends.myHandle == null) Friends.loadMe(context)
+            if (Friends.myHandle != null && Friends.circle == null) Friends.refresh()
+        }
+    }
+
     val listState = rememberLazyListState()
     var showRecovery by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -110,6 +118,9 @@ fun HomeScreen(
                     }
                 }
             }
+
+            // Friends where the app opens, not four tabs away (Hevy and Strava open on them).
+            if (showTodayFriends()) item(key = "friends") { TodayFriends(Modifier.enterAnimation(1)) }
 
             item { UpdateCard() }
 

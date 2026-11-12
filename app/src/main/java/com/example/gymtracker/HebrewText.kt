@@ -657,6 +657,8 @@ internal object HebrewText {
         m["Vibration"] = "רטט"
         m["Volume"] = "נפח"
         m["Duration"] = "משך"
+        m["{0} finished {1}"] = "‏{0} סיים/ה {1}"
+        m["Add friends to see their workouts here."] = "הוסיפו חברים כדי לראות כאן את האימונים שלהם."
         m["W"] = "ח"
         m["Warm-up"] = "חימום"
         m["Was {0}"] = "היה {0}"
