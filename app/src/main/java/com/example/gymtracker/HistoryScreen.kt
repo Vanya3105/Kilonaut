@@ -416,13 +416,19 @@ fun WorkoutHistoryCard(
                 }
             }
         }
+        // The numbers as Hevy's cards show them: a label over each, read across in one glance.
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill(formatDuration(workout.durationSeconds), icon = Icons.Rounded.Schedule)
-            Pill(tr("{0} sets", sets))
-            if (workout.totalVolumeKg > 0) Pill(formatVolume(workout.totalVolumeKg))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            CardStat(tr("Duration"), formatDuration(workout.durationSeconds))
+            if (workout.totalVolumeKg > 0) CardStat(tr("Volume"), formatVolume(workout.totalVolumeKg))
+            CardStat(tr("Sets"), sets.toString())
         }
         ExerciseSummary(rows)
+        val muscles = remember(workout) { musclesWorked(workout) }
+        if (muscles.isNotEmpty()) Text(
+            muscles.joinToString(" · ") { shown(it) }, style = AppType.caption, color = P.textTertiary,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp)
+        )
         val note = remember(workout, allHistory) { LocalStorage.getWorkoutNote(context, workout.id) }
         if (note.isNotBlank()) {
             Text(
@@ -469,6 +475,24 @@ fun WorkoutHistoryCard(
 
 private const val SUMMARY_ROWS = 4
 
+@Composable
+private fun CardStat(label: String, value: String) {
+    val P = LocalPalette.current
+    Column {
+        Text(label, style = AppType.caption, color = P.textSecondary)
+        Text(value, style = AppType.bodyStrong.copy(fontFeatureSettings = "tnum"), color = P.textPrimary, maxLines = 1)
+    }
+}
+
+/** The muscles a workout trained, most work sets first; three at most, so it stays one line. */
+internal fun musclesWorked(workout: CompletedWorkout): List<String> =
+    workout.exercises.filter { !it.isSkipped }
+        .groupBy { ExerciseDatabase.find(it.name)?.muscle ?: it.targetMuscle }
+        .filterKeys { it.isNotBlank() }
+        .mapValues { (_, list) -> list.sumOf { it.workSets.size } }
+        .filterValues { it > 0 }
+        .entries.sortedByDescending { it.value }.take(3).map { it.key }
+
 /** Each exercise with its best set and whether it was a new best. */
 @Composable
 private fun summaryRows(workout: CompletedWorkout, allHistory: List<CompletedWorkout>): List<Triple<ExerciseEntry, SetEntry?, Boolean>> {
@@ -492,12 +516,16 @@ private fun ExerciseSummary(rows: List<Triple<ExerciseEntry, SetEntry?, Boolean>
     val P = LocalPalette.current
     if (rows.isEmpty()) return
     Spacer(Modifier.height(12.dp))
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(P.bgControl).padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(P.borderSubtle))
+    Spacer(Modifier.height(6.dp))
+    Column(Modifier.fillMaxWidth()) {
         rows.take(SUMMARY_ROWS).forEach { (ex, best, isBest) ->
             Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                ExerciseThumb(ex.name, size = 32.dp, showEmpty = true)
+                Spacer(Modifier.width(10.dp))
                 // Only warm-ups (or nothing) logged: a dash, not "0 ×".
-                Text(ex.workSets.size.let { if (it == 0) "–" else "$it ×" }, style = AppType.caption.copy(fontFeatureSettings = "tnum"), color = P.textTertiary, modifier = Modifier.width(28.dp))
-                Text(shown(ex.name), style = AppType.label, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                val count = ex.workSets.size.let { if (it == 0) "–" else "$it ×" }
+                Text("$count ${shown(ex.name)}", style = AppType.body, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (isBest) {
                     Icon(Icons.Rounded.EmojiEvents, tr("New best"), tint = P.warningText, modifier = Modifier.padding(end = 4.dp).size(14.dp))
                 }
@@ -506,7 +534,7 @@ private fun ExerciseSummary(rows: List<Triple<ExerciseEntry, SetEntry?, Boolean>
         }
         if (rows.size > SUMMARY_ROWS) {
             val more = rows.size - SUMMARY_ROWS
-            Text(if (more == 1) tr("+1 more exercise") else tr("+{0} more exercises", more), style = AppType.caption, color = P.textTertiary, modifier = Modifier.padding(top = 2.dp, bottom = 2.dp))
+            Text(if (more == 1) tr("+1 more exercise") else tr("+{0} more exercises", more), style = AppType.caption, color = P.textTertiary, modifier = Modifier.padding(start = 42.dp, top = 2.dp))
         }
     }
 }

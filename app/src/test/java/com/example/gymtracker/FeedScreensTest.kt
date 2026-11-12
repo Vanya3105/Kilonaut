@@ -133,6 +133,35 @@ class FeedScreensTest {
         save("9-today-friends")
     }
 
+    /** A History card, Hevy style: stats strip, exercises with pictures and best sets, muscles line. */
+    private fun drawHistoryCard(name: String, palette: GymPalette) {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-xxhdpi")
+        fun s(w: String, r: String) = SetEntry(setNumber = 1, weight = w, reps = r, isCompleted = true)
+        val w = CompletedWorkout(
+            id = 1_762_900_000_000L, splitTitle = "Push A", dateKey = "2026-11-11", displayDate = "2026-11-11", durationSeconds = 3120,
+            bodyWeightKg = 80f, photoPath = null, skippedExercises = emptyList(), exercises = listOf(
+                ExerciseEntry("Barbell Bench Press", "Chest", sets = listOf(s("80", "8"), s("80", "8"), s("80", "7"))),
+                ExerciseEntry("Incline Dumbbell Press", "Chest", sets = listOf(s("28", "10"), s("28", "10"), s("28", "9"))),
+                ExerciseEntry("Overhead Press", "Shoulders", sets = listOf(s("45", "8"), s("45", "8"))),
+                ExerciseEntry("Triceps Pushdown", "Triceps", sets = listOf(s("30", "12"), s("30", "12"))),
+                ExerciseEntry("Lateral Raise", "Shoulders", sets = listOf(s("10", "15"), s("10", "15")))
+            )
+        ).let { it.copy(totalVolumeKg = it.exercises.sumOf { e -> e.sets.sumOf { x -> (x.weightKg * x.repCount).toDouble() } }.toInt()) }
+        compose.setContent {
+            GymTheme(palette) {
+                Box(Modifier.fillMaxSize().background(palette.bgPrimary).padding(16.dp)) {
+                    WorkoutHistoryCard(w, listOf(w), onOpen = {}, onDelete = {}, onViewPhoto = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        save(name)
+    }
+
+    @Test fun historyCard() = drawHistoryCard("10-history-card", LightPalette)
+    @Test fun historyCardDark() = drawHistoryCard("10-history-card-dark", DarkPalette)
+
     @Test fun cards() = drawCards("8-cards", LightPalette)
     @Test fun cardsDark() = drawCards("8-cards-dark", DarkPalette)
 
