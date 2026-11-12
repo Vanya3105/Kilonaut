@@ -92,7 +92,8 @@ fun WeeklyVolumeCard(history: List<CompletedWorkout>, modifier: Modifier = Modif
         }
         Spacer(Modifier.height(16.dp))
         val max = (weeks.maxOf { it.volumeKg }.coerceAtLeast(typical ?: 0)).coerceAtLeast(1).toFloat()
-        val muted = P.accentPrimary.copy(alpha = if (P.isDark) 0.32f else 0.22f)
+        // On dark, see-through orange turns brown: the other bars go a quiet grey and only the picked one is orange.
+        val muted = if (P.isDark) P.textTertiary.copy(alpha = 0.45f) else P.accentPrimary.copy(alpha = 0.22f)
         val empty = P.bgControl
         val line = P.textTertiary
         Canvas(

@@ -28,6 +28,11 @@ import androidx.compose.material.icons.rounded.DynamicFeed
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,7 +55,7 @@ object WhatsNew {
 
     /** The highlights of [version], or none. Words through [tr] when shown, so they follow the language. */
     /** Versions with notes, newest first. */
-    private val VERSIONS = listOf("1.0.0-beta.3", "1.0.0-beta.2", "1.0.0-beta.1")
+    private val VERSIONS = listOf("1.0.0-beta.4", "1.0.0-beta.3", "1.0.0-beta.2", "1.0.0-beta.1")
 
     /**
      * [current]'s notes first, then those of versions newer than [since] that weren't seen (an update
@@ -62,6 +67,17 @@ object WhatsNew {
     }
 
     internal fun notesFor(version: String): List<Item> = when (version) {
+        "1.0.0-beta.4" -> listOf(
+            Item(Icons.Rounded.Timer, tr("A workout screen that keeps count"), tr("Time, volume and sets count up under the title as you train. Set rows are tighter, and a done set turns green.")),
+            Item(Icons.Rounded.Group, tr("Friends up front"), tr("Feed is now the second tab, a list of cards with each workout in full. Today shows who trained lately: tap a face for their page.")),
+            Item(Icons.Rounded.Checklist, tr("Know the day before you start"), tr("Up next lists every exercise with its sets and today's top weight. The other days name their exercises.")),
+            Item(Icons.Rounded.Event, tr("History at a glance"), tr("Each workout shows its time, volume and sets, every exercise with its picture and best set, and the muscles you trained.")),
+            Item(Icons.Rounded.BarChart, tr("Your training on Profile"), tr("A chart of your time, volume or workouts, by week or by month. Tap a bar to see its number.")),
+            Item(Icons.AutoMirrored.Rounded.ReceiptLong, tr("A page for every workout"), tr("Open a logged workout to see its sets, new bests, muscles worked and how it compares with last time. The pencil edits it.")),
+            Item(Icons.AutoMirrored.Rounded.ShowChart, tr("Weekly volume on Progress"), tr("Twelve weeks of lifting, with a line for your usual week. Tap a bar to see that week.")),
+            Item(Icons.Rounded.Settings, tr("Settings in four pages"), tr("Friends and privacy, Training, Your data and App, each saying what's inside.")),
+            Item(Icons.Rounded.Build, tr("Fixes"), tr("Importing from Strong or Hevy tells the dumbbell and barbell versions of an exercise apart."))
+        )
         "1.0.0-beta.3" -> listOf(
             Item(Icons.Rounded.Group, tr("Friends"), tr("Pick a username, find friends by it and follow each other. Only friends see what you share.")),
             Item(Icons.Rounded.DynamicFeed, tr("A feed to swipe through"), tr("Share a workout you logged, with a few words if you like, and swipe up through your friends' posts. Double-tap to like.")),

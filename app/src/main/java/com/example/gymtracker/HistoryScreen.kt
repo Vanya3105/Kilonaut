@@ -526,6 +526,7 @@ private fun ExerciseSummary(rows: List<Triple<ExerciseEntry, SetEntry?, Boolean>
                 // Only warm-ups (or nothing) logged: a dash, not "0 ×".
                 val count = ex.workSets.size.let { if (it == 0) "–" else "$it ×" }
                 Text("$count ${shown(ex.name)}", style = AppType.body, color = P.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
                 if (isBest) {
                     Icon(Icons.Rounded.EmojiEvents, tr("New best"), tint = P.warningText, modifier = Modifier.padding(end = 4.dp).size(14.dp))
                 }
